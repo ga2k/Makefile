@@ -455,14 +455,22 @@ define git_push_repo
 	@echo -e "$(GREEN)Processing git push in: $$(pwd)$(NC)"; \
 	if [ -d "cmake" ]; then \
 		echo -e "$(GREEN)Processing cmake submodule...$(NC)"; \
-		cd cmake && \
-	git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed in cmake submodule at $$(pwd)$(NC)"; exit 1) && \
+		(cd cmake && \
+		if ! git symbolic-ref -q HEAD >/dev/null 2>&1; then \
+			echo -e "$(YELLOW)cmake submodule in detached HEAD, checking out master branch...$(NC)"; \
+			if git checkout master 2>/dev/null || git checkout main 2>/dev/null; then \
+				echo -e "$(GREEN)Checked out branch, pulling...$(NC)"; \
+				git pull || (git merge --abort 2>/dev/null; echo -e "$(YELLOW)Pull failed$(NC)"); \
+			else \
+				echo -e "$(YELLOW)Could not checkout branch, skipping pull$(NC)"; \
+			fi; \
+		else \
+			git pull || (git merge --abort 2>/dev/null; echo -e "$(YELLOW)Pull failed$(NC)"); \
+		fi && \
 		git add . && \
-		(git diff --cached --quiet || (git commit -m "$(MSG)" && git push)) && \
-		cd ..; \
+		(git diff --cached --quiet || (git commit -m "$(MSG)" && git push))); \
 	fi; \
-	git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
-	git submodule update --init --recursive || true; \
+	git pull --no-recurse-submodules || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
 	git add . && \
 	(git diff --cached --quiet || (git commit -m "$(MSG)" && git push))
 endef
@@ -471,8 +479,19 @@ define sync_cmake_submodules
 	@echo -e "$(YELLOW)Syncing cmake submodules across all modules...$(NC)"
 	@for mod in $(MODULES); do \
 		if [ -d "$(MODULE_PREFIX)/$$mod/cmake" ]; then \
-			echo -e "$(GREEN)Pulling cmake in $$mod...$(NC)"; \
-			cd $(MODULE_PREFIX)/$$mod/cmake && git pull && cd - >/dev/null; \
+			echo -e "$(GREEN)Syncing cmake in $$mod...$(NC)"; \
+			(cd $(MODULE_PREFIX)/$$mod/cmake && \
+			if ! git symbolic-ref -q HEAD >/dev/null 2>&1; then \
+				echo -e "$(YELLOW)cmake in detached HEAD, checking out master branch...$(NC)"; \
+				if git checkout master 2>/dev/null || git checkout main 2>/dev/null; then \
+					echo -e "$(GREEN)Checked out branch, pulling...$(NC)"; \
+					git pull || echo -e "$(YELLOW)Pull failed$(NC)"; \
+				else \
+					echo -e "$(YELLOW)Could not checkout branch, skipping pull$(NC)"; \
+				fi; \
+			else \
+				git pull || echo -e "$(YELLOW)Pull failed$(NC)"; \
+			fi); \
 		fi; \
 	done
 endef
@@ -533,12 +552,19 @@ endif
 #
 define git_pull_repo
 	@echo -e "$(GREEN)Processing git pull in: $$(pwd)$(NC)"; \
-	git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
-	git submodule update --init --recursive || true; \
-	if [ -d "cmake" ]; then \
+	git pull --no-recurse-submodules || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
+	if [ -d "cmake" ]; then
 		echo -e "$(GREEN)Pulling cmake submodule...$(NC)"; \
 		cd cmake && \
-		git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed in cmake submodule at $$(pwd)$(NC)"; exit 1) && \
+		if ! git symbolic-ref -q HEAD >/dev/null; then \
+			echo -e "$(YELLOW)cmake submodule in detached HEAD, checking out main branch...$(NC)"; \
+			git checkout main 2>/dev/null || git checkout master 2>/dev/null || echo -e "$(YELLOW)Could not find main/master branch$(NC)"; \
+		fi && \
+		if git symbolic-ref -q HEAD >/dev/null; then \
+			git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed in cmake submodule at $$(pwd)$(NC)"; exit 1); \
+		else \
+			echo -e "$(YELLOW)Skipping pull - cmake submodule still in detached HEAD$(NC)"; \
+		fi && \
 		cd ..; \
 	fi
 endef
