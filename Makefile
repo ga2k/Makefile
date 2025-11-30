@@ -1,8 +1,50 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean build stage install push pull
+.PHONY: help clean config build stage install push pull
 .DEFAULT_GOAL := help
+
+# Auto-update check - once per day
+MAKEFILE_UPDATE_MARKER := .makefile_update_check
+MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/main/Makefile
+TODAY := $(shell date +%Y-%m-%d)
+
+ifneq ($(wildcard $(MAKEFILE_UPDATE_MARKER)),)
+LAST_CHECK := $(shell cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null)
+else
+LAST_CHECK := never
+endif
+
+ifneq ($(LAST_CHECK),$(TODAY))
+$(shell \
+	if command -v curl >/dev/null 2>&1; then \
+		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
+		MY_DATE=$$(date -u -r $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
+		RESPONSE=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MY_DATE" -o /tmp/Makefile.new "$(MAKEFILE_REPO_URL)"); \
+		if [ "$$RESPONSE" = "200" ]; then \
+			cp /tmp/Makefile.new Makefile; \
+			rm -f /tmp/Makefile.new; \
+			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
+			echo "MAKEFILE_UPDATED=1" > .makefile_status; \
+		else \
+			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
+			echo "MAKEFILE_UPDATED=0" > .makefile_status; \
+		fi; \
+	else \
+		echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
+		echo "MAKEFILE_UPDATED=0" > .makefile_status; \
+	fi \
+)
+endif
+
+ifneq ($(wildcard .makefile_status),)
+MAKEFILE_UPDATED := $(shell grep MAKEFILE_UPDATED=1 .makefile_status >/dev/null 2>&1 && echo 1 || echo 0)
+ifeq ($(MAKEFILE_UPDATED),1)
+$(shell rm -f .makefile_status)
+$(error Makefile has been updated from repository. Please re-run your make command.)
+endif
+$(shell rm -f .makefile_status)
+endif
 
 # Color output (use -e with echo for these to work)
 RED := \033[0;31m
@@ -73,14 +115,43 @@ endef
 # Build directory determination (from preset)
 BUILD_DIR := build
 
+# Auto-generate CMakePresets.json if it doesn't exist but the template does
+ifeq (,$(wildcard CMakePresets.json))
+ifneq (,$(wildcard CMakePresets.in))
+ifneq (,$(wildcard cmake/filter-presets.py))
+$(shell python3 cmake/filter-presets.py CMakePresets.in CMakePresets.json)
+$(info Generated CMakePresets.json from CMakePresets.in)
+endif
+endif
+endif
+
+# Helper: configure with preset when CMakePresets.json exists
+define run_config
+	@if [ -f CMakePresets.json ]; then \
+		echo -e "$(GREEN)Configuring with preset $(PRESET)$(NC)"; \
+		cmake --preset "$(PRESET)"; \
+	else \
+		echo -e "$(GREEN)Configuring in $(BUILD_DIR)$(NC)"; \
+		cmake -S . -B $(BUILD_DIR); \
+	fi
+endef
+
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
 # Usage: $(call run_build,<cmake-args>,<destdir>)
 # If destdir is provided, it will be set as DESTDIR environment variable
+# Auto-configures if build directory doesn't exist
 define run_build
 	@if [ -f CMakePresets.json ]; then \
+		if ! cmake --build --preset "$(PRESET)" --target help >/dev/null 2>&1; then \
+			echo -e "$(YELLOW)Build cache not found, configuring first...$(NC)"; \
+			cmake --preset "$(PRESET)" || exit 1; \
+		fi; \
 		$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1); \
 	else \
-		cmake -S . -B $(BUILD_DIR) || exit 1; \
+		if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
+			echo -e "$(YELLOW)Build cache not found, configuring first...$(NC)"; \
+			cmake -S . -B $(BUILD_DIR) || exit 1; \
+		fi; \
 		$(if $(2),DESTDIR=$(2)) cmake --build $(BUILD_DIR) $(1); \
 	fi
 endef
@@ -94,10 +165,12 @@ help:
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make clean                  - Clean current module"
-	@echo "  make build                  - Build current module"
+	@echo "  make config                 - Configure current module"
+	@echo "  make build                  - Build current module (auto-configures if needed)"
 	@echo "  make stage                  - Stage current module to STAGEDIR"
 	@echo "  make install                - Install current module (requires sudo)"
 	@echo "  make clean-<Module|All>     - Clean specific module or all"
+	@echo "  make config-<Module|All>    - Configure specific module or all"
 	@echo "  make build-<Module|All>     - Build specific module or all"
 	@echo "  make stage-<Module|All>     - Stage specific module or all"
 	@echo "  make install-<Module|All>   - Install specific module or all"
@@ -160,6 +233,58 @@ clean_module_impl:
 	$(call clean_module,$(MODULE))
 
 #
+# CONFIG targets
+#
+config:
+ifeq ($(MODE),superbuild)
+	@echo -e "$(YELLOW)Delegating to first module for config-All...$(NC)"
+	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
+else
+	@echo -e "$(GREEN)Configuring current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)"
+	@$(call run_config) || (echo -e "$(RED)Configure failed for $(CURRENT_DIR)$(NC)" && exit 1)
+endif
+
+define config_module
+	@echo -e "$(GREEN)Configuring module: $(1) with preset $(PRESET)$(NC)"
+	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
+		cd $(MODULE_PREFIX)/$(1) && $(call run_config) || \
+		(echo -e "$(RED)Configure failed for $(1)$(NC)" && exit 1); \
+	else \
+		echo -e "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)"; \
+	fi
+endef
+
+config-%:
+	$(call validate_module,$*)
+ifeq ($(MODE),superbuild)
+ifeq ($*,All)
+	@echo -e "$(YELLOW)Delegating to first module for config-All...$(NC)"
+	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
+else
+	@echo -e "$(YELLOW)Delegating to module $* for config...$(NC)"
+	@if [ -d "$*" ]; then \
+		cd $* && $(MAKE) config; \
+	else \
+		echo -e "$(RED)ERROR: Module $* does not exist$(NC)"; \
+		exit 1; \
+	fi
+endif
+else
+ifeq ($*,All)
+	@echo -e "$(GREEN)Configuring all modules in dependency order$(NC)"
+	@for mod in $(MODULES); do \
+		$(MAKE) config_module_impl MODULE=$$mod || exit 1; \
+	done
+else
+	$(call check_module_exists,$*)
+	$(call config_module,$*)
+endif
+endif
+
+config_module_impl:
+	$(call config_module,$(MODULE))
+
+#
 # BUILD targets
 #
 build:
@@ -168,6 +293,7 @@ ifeq ($(MODE),superbuild)
 	@cd $(word 1,$(MODULES)) && $(MAKE) build-All
 else
 	@echo -e "$(GREEN)Building current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)"
+	@mkdir -p build/debug/shared
 	@$(call run_build,) || (echo -e "$(RED)Build failed for $(CURRENT_DIR)$(NC)" && exit 1)
 endif
 
@@ -221,6 +347,7 @@ ifeq ($(MODE),superbuild)
 else
 	@echo -e "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)/$(CURRENT_DIR)$(NC)"
 	@mkdir -p $(STAGEDIR)/$(CURRENT_DIR)
+	@mkdir -p build/debug/shared
 	@$(call run_build,--target install,$(STAGEDIR)/$(CURRENT_DIR)) || \
 		(echo -e "$(RED)Stage failed for $(CURRENT_DIR)$(NC)" && exit 1)
 endif
