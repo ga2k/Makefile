@@ -1,7 +1,7 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean config build stage install push pull
+.PHONY: help clean config build stage install push pull update
 .DEFAULT_GOAL := help
 
 # Auto-update check - once per day
@@ -178,6 +178,29 @@ help:
 	@echo "  make push-<Module|All>      - Commit and push specific module or all"
 	@echo "  make pull                   - Pull current module"
 	@echo "  make pull-<Module|All>      - Pull specific module or all"
+	@echo "  make update                 - Force update Makefile from repository"
+
+#
+# UPDATE target
+#
+update:
+	@echo -e "$(YELLOW)Checking for Makefile updates from $(MAKEFILE_REPO_URL)...$(NC)"
+	@if command -v curl >/dev/null 2>&1; then \
+		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
+		MY_DATE=$$(date -u -r $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
+		RESPONSE=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MY_DATE" -o /tmp/Makefile.new "$(MAKEFILE_REPO_URL)"); \
+		if [ "$$RESPONSE" = "200" ]; then \
+			cp /tmp/Makefile.new Makefile; \
+			rm -f /tmp/Makefile.new; \
+			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
+			echo -e "$(GREEN)Makefile has been updated from repository.$(NC)"; \
+		else \
+			echo -e "$(GREEN)Makefile is already up to date.$(NC)"; \
+		fi; \
+	else \
+		echo -e "$(RED)ERROR: curl not found. Cannot update Makefile.$(NC)"; \
+		exit 1; \
+	fi
 
 #
 # CLEAN targets
