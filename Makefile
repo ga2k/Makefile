@@ -247,7 +247,7 @@ endif
 define config_module
 	@echo -e "$(GREEN)Configuring module: $(1) with preset $(PRESET)$(NC)"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && $(call run_config) || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" || \
 		(echo -e "$(RED)Configure failed for $(1)$(NC)" && exit 1); \
 	else \
 		echo -e "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)"; \
@@ -300,7 +300,7 @@ endif
 define build_module
 	@echo -e "$(GREEN)Building module: $(1) with preset $(PRESET)$(NC)"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && $(call run_build,) || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
 		(echo -e "$(RED)Build failed for $(1)$(NC)" && exit 1); \
 	else \
 		echo -e "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)"; \
@@ -357,7 +357,7 @@ define stage_module
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR)/$(1) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		$(call run_build,--target install,$(STAGEDIR)/$(1)) || \
+		DESTDIR=$(STAGEDIR)/$(1) cmake --build --preset "$(PRESET)" --target install || \
 		(echo -e "$(RED)Stage failed for $(1)$(NC)" && exit 1); \
 	else \
 		echo -e "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)"; \
