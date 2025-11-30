@@ -1,13 +1,15 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean config build stage install push pull update
+.PHONY: help clean config build stage install push pull update silent noisy
 .DEFAULT_GOAL := help
 
 # Auto-update check - once per day
 MAKEFILE_UPDATE_MARKER := .makefile_update_check
+MAKEFILE_SILENT_MARKER := .makefile_silent
 MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/main/Makefile
 TODAY := $(shell date +%Y-%m-%d)
+IS_SILENT := $(shell [ -f $(MAKEFILE_SILENT_MARKER) ] && echo 1 || echo 0)
 
 ifneq ($(wildcard $(MAKEFILE_UPDATE_MARKER)),)
 LAST_CHECK := $(shell cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null)
@@ -16,6 +18,7 @@ LAST_CHECK := never
 endif
 
 ifneq ($(LAST_CHECK),$(TODAY))
+$(info Checking for update: )
 $(shell \
 	if command -v curl >/dev/null 2>&1; then \
 		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
@@ -35,13 +38,22 @@ $(shell \
 		echo "MAKEFILE_UPDATED=0" > .makefile_status; \
 	fi \
 )
+else
+ifeq ($(IS_SILENT),0)
+$(info Not checking for update - already done today.)
+$(info Run "make update" to do it anyway.)
+$(info Run "make silent" to stop these messages.)
+endif
 endif
 
 ifneq ($(wildcard .makefile_status),)
 MAKEFILE_UPDATED := $(shell grep MAKEFILE_UPDATED=1 .makefile_status >/dev/null 2>&1 && echo 1 || echo 0)
 ifeq ($(MAKEFILE_UPDATED),1)
+$(info Checking for update: your version was updated. Please re-run your make command.)
 $(shell rm -f .makefile_status)
-$(error Makefile has been updated from repository. Please re-run your make command.)
+$(error )
+else
+$(info Checking for update: you have the newest version.)
 endif
 $(shell rm -f .makefile_status)
 endif
@@ -179,12 +191,25 @@ help:
 	@echo "  make pull                   - Pull current module"
 	@echo "  make pull-<Module|All>      - Pull specific module or all"
 	@echo "  make update                 - Force update Makefile from repository"
+	@echo "  make silent                 - Suppress daily update check messages"
+	@echo "  make noisy                  - Re-enable daily update check messages"
+
+#
+# SILENT/NOISY targets
+#
+silent:
+	@touch $(MAKEFILE_SILENT_MARKER)
+	@echo -e "$(GREEN)Daily update check messages suppressed. Run 'make noisy' to re-enable.$(NC)"
+
+noisy:
+	@rm -f $(MAKEFILE_SILENT_MARKER)
+	@echo -e "$(GREEN)Daily update check messages re-enabled.$(NC)"
 
 #
 # UPDATE target
 #
 update:
-	@echo -e "$(YELLOW)Checking for Makefile updates from $(MAKEFILE_REPO_URL)...$(NC)"
+	@printf "Checking for update: "
 	@if command -v curl >/dev/null 2>&1; then \
 		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
 		MY_DATE=$$(date -u -r $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
@@ -193,9 +218,9 @@ update:
 			cp /tmp/Makefile.new Makefile; \
 			rm -f /tmp/Makefile.new; \
 			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-			echo -e "$(GREEN)Makefile has been updated from repository.$(NC)"; \
+			echo -e "$(GREEN)your version was updated. Please re-run your make command.$(NC)"; \
 		else \
-			echo -e "$(GREEN)Makefile is already up to date.$(NC)"; \
+			echo -e "$(GREEN)you have the newest version.$(NC)"; \
 		fi; \
 	else \
 		echo -e "$(RED)ERROR: curl not found. Cannot update Makefile.$(NC)"; \
@@ -475,7 +500,7 @@ install_module_impl:
 # GIT PUSH targets
 #
 define git_push_repo
-	@echo -e "$(GREEN)Processing git push in: $$(pwd)$(NC)"; \
+	echo -e "$(GREEN)Processing git push in: $$(pwd)$(NC)"; \
 	if [ -d "cmake" ]; then \
 		echo -e "$(GREEN)Processing cmake submodule...$(NC)"; \
 		(cd cmake && \
@@ -499,8 +524,8 @@ define git_push_repo
 endef
 
 define sync_cmake_submodules
-	@echo -e "$(YELLOW)Syncing cmake submodules across all modules...$(NC)"
-	@for mod in $(MODULES); do \
+	echo -e "$(YELLOW)Syncing cmake submodules across all modules...$(NC)"
+	for mod in $(MODULES); do \
 		if [ -d "$(MODULE_PREFIX)/$$mod/cmake" ]; then \
 			echo -e "$(GREEN)Syncing cmake in $$mod...$(NC)"; \
 			(cd $(MODULE_PREFIX)/$$mod/cmake && \
@@ -574,7 +599,7 @@ endif
 # GIT PULL targets
 #
 define git_pull_repo
-	@echo -e "$(GREEN)Processing git pull in: $$(pwd)$(NC)"; \
+	echo -e "$(GREEN)Processing git pull in: $$(pwd)$(NC)"; \
 	git pull --no-recurse-submodules || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
 	if [ -d "cmake" ]; then
 		echo -e "$(GREEN)Pulling cmake submodule...$(NC)"; \
