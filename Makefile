@@ -42,18 +42,19 @@ __autoupdate:
 	LAST=""; [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && LAST=$$(cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null); \
 	if [ "$$LAST" = "$$TODAY" ]; then \
 		if [ "$$IS_SILENT" -ne 1 ]; then \
-			echo "Checking for update:  already done today."; \
+			echo -e "Checking for update: $(GREEN)already done today.$(NC)"; \
 			echo ""; \
-			echo "Run 'make update' to update anyway."; \
-			echo "Run 'make quiet' to stop these messages."; \
-			echo "Run 'make noisy' to start showing them again."; \
+			echo -e "Run '$(YELLOW)make update$(NC)' to update anyway."; \
+			echo -e "Run '$(YELLOW)make quiet$(NC)'  to stop these messages."; \
+			echo -e "Run '$(YELLOW)make noisy$(NC)'  to start showing them again."; \
+			echo; \
 		fi; \
 		exit 0; \
 	fi; \
 	\
 	if ! command -v curl >/dev/null 2>&1; then \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
+		echo -e "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow."; \
 		exit 0; \
 	fi; \
 	TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
@@ -61,13 +62,13 @@ __autoupdate:
 	if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
-		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
+		echo -e "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow."; \
 		exit 0; \
 	fi; \
 	if cmp -s $$TMP_BODY Makefile; then \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
+		echo -e "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow."; \
 		exit 0; \
 	fi; \
 	\
@@ -94,7 +95,7 @@ __autoupdate:
 		mv -f $$TMP_BODY Makefile; \
 		rm -f $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		echo "Checking for update: a newer file found and downloaded. Please re-run your command"; \
+		echo -e "Checking for update: $(GREEN)a newer file found and downloaded.$(NC) Please re-run your command"; \
 		exit 2; \
 	else \
 		[ -z "$$UPDATE_DEBUG" ] || { \
@@ -104,7 +105,7 @@ __autoupdate:
 		}; \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		echo "Checking for update: your local Makefile has uncommitted changes; not replacing. Set UPDATE_FORCE=1 to force."; \
+		echo -e "Checking for update: $(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Set UPDATE_FORCE=1 to force."; \
 		exit 0; \
 	fi
 
@@ -280,7 +281,7 @@ update:
 		fi; \
 		if [ "$$IS_DIRTY" -eq 1 ] && [ "$$UPDATE_FORCE" != "1" ]; then \
 			rm -f $$TMP_BODY $$TMP_HEAD; \
-			echo -e "$(YELLOW)your local Makefile has uncommitted changes; not replacing. Set UPDATE_FORCE=1 to force.$(NC)"; \
+			echo -e "$(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Set UPDATE_FORCE=1 to force.$(NC)"; \
 			exit 0; \
 		fi; \
 		if [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$UPDATE_FORCE" != "1" ]; then \
