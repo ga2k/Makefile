@@ -1,62 +1,20 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean config build stage install push pull update silent noisy
+.PHONY: help clean config build stage install push pull update silent noisy __autoupdate
 .DEFAULT_GOAL := help
 
-# Auto-update check - once per day
+# Auto-update implementation
+# This runs once at the start of any requested target (except update/silent/noisy),
+# checks the remote Makefile, and if an update is available it replaces this
+# Makefile and aborts the current run with a message to re-run. If up-to-date,
+# it optionally prints a message (suppressed by the 'silent' marker).
+
+# Variables used by update/silent targets
 MAKEFILE_UPDATE_MARKER := .makefile_update_check
 MAKEFILE_SILENT_MARKER := .makefile_silent
 MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/main/Makefile
 TODAY := $(shell date +%Y-%m-%d)
-IS_SILENT := $(shell [ -f $(MAKEFILE_SILENT_MARKER) ] && echo 1 || echo 0)
-
-ifneq ($(wildcard $(MAKEFILE_UPDATE_MARKER)),)
-LAST_CHECK := $(shell cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null)
-else
-LAST_CHECK := never
-endif
-
-ifneq ($(LAST_CHECK),$(TODAY))
-$(info Checking for update: )
-$(shell \
-	if command -v curl >/dev/null 2>&1; then \
-		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
-		MY_DATE=$$(date -u -r $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
-		RESPONSE=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MY_DATE" -o /tmp/Makefile.new "$(MAKEFILE_REPO_URL)"); \
-		if [ "$$RESPONSE" = "200" ]; then \
-			cp /tmp/Makefile.new Makefile; \
-			rm -f /tmp/Makefile.new; \
-			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-			echo "MAKEFILE_UPDATED=1" > .makefile_status; \
-		else \
-			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-			echo "MAKEFILE_UPDATED=0" > .makefile_status; \
-		fi; \
-	else \
-		echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-		echo "MAKEFILE_UPDATED=0" > .makefile_status; \
-	fi \
-)
-else
-ifeq ($(IS_SILENT),0)
-$(info Not checking for update - already done today.)
-$(info Run "make update" to do it anyway.)
-$(info Run "make silent" to stop these messages.)
-endif
-endif
-
-ifneq ($(wildcard .makefile_status),)
-MAKEFILE_UPDATED := $(shell grep MAKEFILE_UPDATED=1 .makefile_status >/dev/null 2>&1 && echo 1 || echo 0)
-ifeq ($(MAKEFILE_UPDATED),1)
-$(info Checking for update: your version was updated. Please re-run your make command.)
-$(shell rm -f .makefile_status)
-$(error )
-else
-$(info Checking for update: you have the newest version.)
-endif
-$(shell rm -f .makefile_status)
-endif
 
 # Color output (use -e with echo for these to work)
 RED := \033[0;31m
@@ -68,13 +26,48 @@ NC := \033[0m # No Color
 export MSG
 export PRESET
 
+# Ensure auto-update runs before the user's goals (skip for update/silent/noisy)
+AUTOUPDATE_SKIP_GOALS := update silent noisy
+ifneq ($(strip $(MAKECMDGOALS)),)
+  ifeq (,$(filter $(AUTOUPDATE_SKIP_GOALS),$(MAKECMDGOALS)))
+    $(foreach g,$(MAKECMDGOALS),$(eval $(g): __autoupdate))
+  endif
+endif
+
+__autoupdate:
+	@IS_SILENT=0; [ -f "$(MAKEFILE_SILENT_MARKER)" ] && IS_SILENT=1; \
+	TODAY="$(TODAY)"; \
+	LAST=""; [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && LAST=$$(cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null); \
+	if [ "$$LAST" = "$$TODAY" ]; then \
+		exit 0; \
+	fi; \
+	if ! command -v curl >/dev/null 2>&1; then \
+		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: curl not found; skipping$(NC)"; \
+		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		exit 0; \
+	fi; \
+	MM=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
+	MD=$$(date -u -r $$MM '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MM '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
+	RESP=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MD" -o Makefile.new.autoupdate "$(MAKEFILE_REPO_URL)"); \
+	if [ "$$RESP" = "200" ]; then \
+		mv -f Makefile.new.autoupdate Makefile; \
+		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		echo -e "$(GREEN)Your Makefile was updated. Please re-run your make command.$(NC)"; \
+		exit 2; \
+	else \
+		rm -f Makefile.new.autoupdate; \
+		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(GREEN)Your Makefile is up to date.$(NC)"; \
+		exit 0; \
+	fi
+
 # Check for .modules file
 ifeq (,$(wildcard ./.modules))
 $(error $(RED)ERROR: .modules file not found in current directory$(NC))
 endif
 
 # Parse .modules file
-SUPERBUILD := $(shell grep -E '^SUPERBUILD\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
+MONOREPO := $(shell grep -E '^MONOREPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 MODULES := $(shell grep -E '^MODULES\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^#]*\).*/\1/')
 STAGEDIR := $(shell grep -E '^STAGEDIR\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 PRESET_FILE := $(shell grep -E '^PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
@@ -89,24 +82,23 @@ STAGEDIR := $(shell echo $(STAGEDIR))
 # Get current directory name
 CURRENT_DIR := $(notdir $(CURDIR))
 
-# Validate current directory
-ifeq ($(SUPERBUILD),)
-    # Non-superbuild mode: current dir must be in MODULES
+# Validate current directory according to MONOREPO rules
+ifeq ($(MONOREPO),)
+    # Not a monorepo: must be in a module dir listed in MODULES
     ifeq (,$(filter $(CURRENT_DIR),$(MODULES)))
         $(error $(RED)ERROR: Current directory '$(CURRENT_DIR)' is not listed in MODULES$(NC))
     endif
-    MODE := non-superbuild
+    MODE := module
     MODULE_PREFIX := ..
 else
-    # Superbuild mode: check if we're in superbuild or module dir
-    ifeq ($(CURRENT_DIR),$(SUPERBUILD))
-        MODE := superbuild
+    # Monorepo set
+    ifeq ($(CURRENT_DIR),$(MONOREPO))
+        MODE := monorepo
         MODULE_PREFIX := .
     else ifeq (,$(filter $(CURRENT_DIR),$(MODULES)))
-        $(error $(RED)ERROR: Current directory '$(CURRENT_DIR)' must be '$(SUPERBUILD)' or one of: $(MODULES)$(NC))
+        $(error $(RED)ERROR: Current directory '$(CURRENT_DIR)' must be '$(MONOREPO)' or one of: $(MODULES)$(NC))
     else
-        # We're in a module dir within superbuild - treat as non-superbuild
-        MODE := non-superbuild
+        MODE := module
         MODULE_PREFIX := ..
     endif
 endif
@@ -231,7 +223,7 @@ update:
 # CLEAN targets
 #
 clean:
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for clean-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) clean-All
 else
@@ -250,7 +242,7 @@ endef
 
 clean-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
 	@echo -e "$(YELLOW)Delegating to first module for clean-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) clean-All
@@ -284,7 +276,7 @@ clean_module_impl:
 # CONFIG targets
 #
 config:
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for config-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
 else
@@ -304,7 +296,7 @@ endef
 
 config-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
 	@echo -e "$(YELLOW)Delegating to first module for config-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
@@ -336,7 +328,7 @@ config_module_impl:
 # BUILD targets
 #
 build:
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for build-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) build-All
 else
@@ -357,7 +349,7 @@ endef
 
 build-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
 	@echo -e "$(YELLOW)Delegating to first module for build-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) build-All
@@ -389,7 +381,7 @@ build_module_impl:
 # STAGE targets
 #
 stage:
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for stage-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) stage-All
 else
@@ -414,7 +406,7 @@ endef
 
 stage-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
 	@echo -e "$(YELLOW)Delegating to first module for stage-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) stage-All
@@ -446,7 +438,7 @@ stage_module_impl:
 # INSTALL targets
 #
 install:
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for install-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) install-All
 else
@@ -468,7 +460,7 @@ endef
 
 install-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
 	@echo -e "$(YELLOW)Delegating to first module for install-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) install-All
@@ -545,54 +537,49 @@ define sync_cmake_submodules
 endef
 
 push:
-ifeq ($(MODE),superbuild)
-	@echo -e "$(YELLOW)Delegating to first module for push-All, then pushing superbuild...$(NC)"
-	@cd $(word 1,$(MODULES)) && $(MAKE) push-All
-	@echo -e "$(GREEN)Pushing superbuild repo$(NC)"
-	@$(git_push_repo)
+ifeq ($(MODE),monorepo)
+	@echo -e "$(YELLOW)At MONOREPO root ($(MONOREPO)). To push all modules and the monorepo, run: make push-All MSG=\"...\"$(NC)"
 else
 	@echo -e "$(GREEN)Pushing current module: $(CURRENT_DIR)$(NC)"
 	@$(git_push_repo)
 	@$(sync_cmake_submodules)
 endif
 
-push-%:
-	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
-ifeq ($*,All)
-	@echo -e "$(YELLOW)Delegating to first module for push-All, then pushing superbuild...$(NC)"
-	@cd $(word 1,$(MODULES)) && $(MAKE) push-All
-	@echo -e "$(GREEN)Pushing superbuild repo$(NC)"
-	@$(git_push_repo)
-else
-	@echo -e "$(YELLOW)Delegating to module $* for push, then pushing superbuild...$(NC)"
-	@if [ -d "$*" ]; then \
-		cd $* && $(MAKE) push;
-	else \
-		echo -e "$(RED)ERROR: Module $* does not exist$(NC)"; \
+push-All:
+	@if [ -z "$(MONOREPO)" ] || [ "$(CURRENT_DIR)" != "$(MONOREPO)" ]; then \
+		echo -e "$(RED)push-All can only be run from the root of a MONOREPO$(NC)"; \
 		exit 1; \
 	fi
-	@echo -e "$(GREEN)Pushing superbuild repo$(NC)"
-	@$(git_push_repo)
-endif
-else
-ifeq ($*,All)
-	@echo -e "$(GREEN)Pushing all modules$(NC)"
+	@echo -e "$(GREEN)Pushing all modules in MONOREPO $(MONOREPO)$(NC)"
 	@for mod in $(MODULES); do \
-		if [ -d "$(MODULE_PREFIX)/$$mod" ]; then \
+		if [ -d "$$mod" ]; then \
 			echo -e "$(GREEN)Pushing module: $$mod$(NC)"; \
-			cd $(MODULE_PREFIX)/$$mod && $(MAKE) push && cd - >/dev/null || exit 1;
+			cd $$mod && $(MAKE) push MSG="$(MSG)" || exit 1; \
+			cd - >/dev/null; \
 		else \
 			echo -e "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)"; \
 		fi; \
 	done
-	@$(sync_cmake_submodules)
+	@echo -e "$(GREEN)Pushing monorepo itself$(NC)"
+	@$(git_push_repo)
+
+push-%:
+	$(call validate_module,$*)
+ifeq ($(MODE),monorepo)
+	@echo -e "$(YELLOW)Delegating to module $* for push, then pushing monorepo...$(NC)"
+	@if [ -d "$*" ]; then \
+		cd $* && $(MAKE) push MSG="$(MSG)"; \
+	else \
+		echo -e "$(RED)ERROR: Module $* does not exist$(NC)"; \
+		exit 1; \
+	fi
+	@echo -e "$(GREEN)Pushing monorepo repo$(NC)"
+	@$(git_push_repo)
 else
 	$(call check_module_exists,$*)
 	@echo -e "$(GREEN)Pushing module: $*$(NC)"
 	@cd $(MODULE_PREFIX)/$* && $(git_push_repo) || exit 1
 	@$(sync_cmake_submodules)
-endif
 endif
 
 #
@@ -618,10 +605,10 @@ define git_pull_repo
 endef
 
 pull:
-ifeq ($(MODE),superbuild)
-	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling superbuild...$(NC)"
+ifeq ($(MODE),monorepo)
+	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling monorepo...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) pull-All
-	@echo -e "$(GREEN)Pulling superbuild repo$(NC)"
+	@echo -e "$(GREEN)Pulling monorepo repo$(NC)"
 	@$(git_pull_repo)
 else
 	@echo -e "$(GREEN)Pulling current module: $(CURRENT_DIR)$(NC)"
@@ -630,21 +617,21 @@ endif
 
 pull-%:
 	$(call validate_module,$*)
-ifeq ($(MODE),superbuild)
+ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling superbuild...$(NC)"
+	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling monorepo...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) pull-All
-	@echo -e "$(GREEN)Pulling superbuild repo$(NC)"
+	@echo -e "$(GREEN)Pulling monorepo repo$(NC)"
 	@$(git_pull_repo)
 else
-	@echo -e "$(YELLOW)Delegating to module $* for pull, then pulling superbuild...$(NC)"
+	@echo -e "$(YELLOW)Delegating to module $* for pull, then pulling monorepo...$(NC)"
 	@if [ -d "$*" ]; then \
 		cd $* && $(MAKE) pull; \
 	else \
 		echo -e "$(RED)ERROR: Module $* does not exist$(NC)"; \
 		exit 1; \
 	fi
-	@echo -e "$(GREEN)Pulling superbuild repo$(NC)"
+	@echo -e "$(GREEN)Pulling monorepo repo$(NC)"
 	@$(git_pull_repo)
 endif
 else
