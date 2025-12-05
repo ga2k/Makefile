@@ -2,6 +2,8 @@
 # Requires .modules configuration file
 
 .PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate
+# Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
+.SILENT: __autoupdate
 .DEFAULT_GOAL := help
 
 # Auto-update implementation
@@ -48,7 +50,7 @@ __autoupdate:
 		fi; \
 		exit 0; \
 	fi; \
-	# First run of the day must print one of the three canonical messages regardless of quiet/noisy
+	\
 	if ! command -v curl >/dev/null 2>&1; then \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
 		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
@@ -68,7 +70,7 @@ __autoupdate:
 		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
 		exit 0; \
 	fi; \
-	# Check for local modifications (dirty) \
+	\
 	IS_DIRTY=1; \
 	if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 		if git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
@@ -84,7 +86,7 @@ __autoupdate:
 	else \
 		REM_EPOCH=0; \
 	fi; \
-	# Decide replacement policy: content-first; ignore timestamps to meet messaging contract \
+	\
 	SHOULD_REPLACE=1; \
 	if [ "$$IS_DIRTY" -ne 0 ]; then SHOULD_REPLACE=0; fi; \
 	if [ "$$SHOULD_REPLACE" -eq 1 ]; then \
