@@ -672,12 +672,12 @@ endif
 define git_pull_repo
 	echo -e "$(GREEN)Processing git pull in: $$(pwd)$(NC)"; \
 	git pull --no-recurse-submodules || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed at $$(pwd)$(NC)"; exit 1); \
-	if [ -d "cmake" ]; then
+	if [ -d "cmake" ]; then \
 		echo -e "$(GREEN)Pulling cmake submodule...$(NC)"; \
 		cd cmake && \
 		if ! git symbolic-ref -q HEAD >/dev/null; then \
-			echo -e "$(YELLOW)cmake submodule in detached HEAD, checking out main branch...$(NC)"; \
-			git checkout main 2>/dev/null || git checkout master 2>/dev/null || echo -e "$(YELLOW)Could not find main/master branch$(NC)"; \
+			echo -e "$(YELLOW)cmake submodule in detached HEAD, checking out master branch...$(NC)"; \
+			git checkout master 2>/dev/null || git checkout main 2>/dev/null || echo -e "$(YELLOW)Could not find master/main branch$(NC)"; \
 		fi && \
 		if git symbolic-ref -q HEAD >/dev/null; then \
 			git pull || (git merge --abort 2>/dev/null; echo -e "$(RED)Pull failed in cmake submodule at $$(pwd)$(NC)"; exit 1); \
@@ -688,12 +688,28 @@ define git_pull_repo
 	fi
 endef
 
-pull:
-ifeq ($(MODE),monorepo)
-	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling monorepo...$(NC)"
-	@cd $(word 1,$(MODULES)) && $(MAKE) pull-All
+pull-All:
+	@if [ -z "$(MONOREPO)" ] || [ "$(CURRENT_DIR)" != "$(MONOREPO)" ]; then \
+		echo -e "$(RED)pull-All can only be run from the root of a MONOREPO$(NC)"; \
+		exit 1; \
+	fi
+	@echo -e "$(GREEN)Pulling all modules in MONOREPO $(MONOREPO)$(NC)"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			echo -e "$(GREEN)Pulling module: $$mod$(NC)"; \
+			cd $$mod && $(MAKE) update && $(MAKE) pull || exit 1; \
+			cd - >/dev/null; \
+		else \
+			echo -e "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)"; \
+		fi; \
+	done
 	@echo -e "$(GREEN)Pulling monorepo repo$(NC)"
 	@$(git_pull_repo)
+
+pull:
+ifeq ($(MODE),monorepo)
+	@echo -e "$(YELLOW)Running pull-All from monorepo root...$(NC)"
+	@$(MAKE) pull-All
 else
 	@echo -e "$(GREEN)Pulling current module: $(CURRENT_DIR)$(NC)"
 	@$(git_pull_repo)
@@ -703,10 +719,8 @@ pull-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@echo -e "$(YELLOW)Delegating to first module for pull-All, then pulling monorepo...$(NC)"
-	@cd $(word 1,$(MODULES)) && $(MAKE) pull-All
-	@echo -e "$(GREEN)Pulling monorepo repo$(NC)"
-	@$(git_pull_repo)
+	@echo -e "$(YELLOW)Running pull-All from monorepo root...$(NC)"
+	@$(MAKE) pull-All
 else
 	@echo -e "$(YELLOW)Delegating to module $* for pull, then pulling monorepo...$(NC)"
 	@if [ -d "$*" ]; then \
