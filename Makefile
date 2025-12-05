@@ -1,16 +1,16 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean config build stage install push pull update silent noisy __autoupdate
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate
 .DEFAULT_GOAL := help
 
 # Auto-update implementation
-# This runs once at the start of any requested target (except update/silent/noisy),
+# This runs once at the start of any requested target (except update/quiet/silent/noisy),
 # checks the remote Makefile, and if an update is available it replaces this
 # Makefile and aborts the current run with a message to re-run. If up-to-date,
 # it optionally prints a message (suppressed by the 'silent' marker).
 
-# Variables used by update/silent targets
+# Variables used by update/quiet(silent) targets
 MAKEFILE_UPDATE_MARKER := .makefile_update_check
 MAKEFILE_SILENT_MARKER := .makefile_silent
 MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/master/Makefile
@@ -27,7 +27,7 @@ export MSG
 export PRESET
 
 # Ensure auto-update runs before the user's goals (skip for update/silent/noisy)
-AUTOUPDATE_SKIP_GOALS := update silent noisy
+AUTOUPDATE_SKIP_GOALS := update quiet silent noisy
 ifneq ($(strip $(MAKECMDGOALS)),)
   ifeq (,$(filter $(AUTOUPDATE_SKIP_GOALS),$(MAKECMDGOALS)))
     $(foreach g,$(MAKECMDGOALS),$(eval $(g): __autoupdate))
@@ -39,27 +39,36 @@ __autoupdate:
 	TODAY="$(TODAY)"; \
 	LAST=""; [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && LAST=$$(cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null); \
 	if [ "$$LAST" = "$$TODAY" ]; then \
+		if [ "$$IS_SILENT" -ne 1 ]; then \
+			echo "Checking for update:  already done today."; \
+			echo ""; \
+			echo "Run 'make update' to update anyway."; \
+			echo "Run 'make quiet' to stop these messages."; \
+			echo "Run 'make noisy' to start showing them again."; \
+		fi; \
 		exit 0; \
 	fi; \
+	# First run of the day must print one of the three canonical messages regardless of quiet/noisy
 	if ! command -v curl >/dev/null 2>&1; then \
-		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: curl not found; skipping$(NC)"; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
 		exit 0; \
 	fi; \
 	TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
 	TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
 	if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
-		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: network error; skipping$(NC)"; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
+		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
 		exit 0; \
 	fi; \
 	if cmp -s $$TMP_BODY Makefile; then \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(GREEN)Your Makefile is up to date.$(NC)"; \
+		echo "Checking for update: your file is up-to-date. Checking again tomorrow."; \
 		exit 0; \
 	fi; \
+	# Check for local modifications (dirty) \
 	IS_DIRTY=1; \
 	if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
 		if git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
@@ -75,19 +84,25 @@ __autoupdate:
 	else \
 		REM_EPOCH=0; \
 	fi; \
-	SHOULD_REPLACE=0; \
-	if [ "$$REM_EPOCH" -ge "$$LOCAL_EPOCH" ]; then SHOULD_REPLACE=1; fi; \
+	# Decide replacement policy: content-first; ignore timestamps to meet messaging contract \
+	SHOULD_REPLACE=1; \
 	if [ "$$IS_DIRTY" -ne 0 ]; then SHOULD_REPLACE=0; fi; \
 	if [ "$$SHOULD_REPLACE" -eq 1 ]; then \
+		[ -z "$$UPDATE_DEBUG" ] || echo -e "$(YELLOW)[autoupdate debug] replacing (dirty=$$IS_DIRTY, trust_ts=$$UPDATE_TRUST_TIMESTAMP, remote=$$REM_EPOCH, local=$$LOCAL_EPOCH)$(NC)"; \
 		mv -f $$TMP_BODY Makefile; \
 		rm -f $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		echo -e "$(GREEN)Your Makefile was updated. Please re-run your make command.$(NC)"; \
+		echo "Checking for update: a newer file found and downloaded. Please re-run your command"; \
 		exit 2; \
 	else \
+		[ -z "$$UPDATE_DEBUG" ] || { \
+			LHS=$$(sha256sum Makefile 2>/dev/null | awk '{print $$1}'); \
+			RHS=$$(sha256sum $$TMP_BODY 2>/dev/null | awk '{print $$1}'); \
+			printf "$(YELLOW)[autoupdate debug] url=%s\nlocal_epoch=%s remote_epoch=%s\nlocal_sha256=%s\nremote_sha256=%s\n(reason: %s)$(NC)\n" "$(MAKEFILE_REPO_URL)" "$$LOCAL_EPOCH" "$$REM_EPOCH" "$$LHS" "$$RHS" "$$( [ "$$IS_DIRTY" -ne 0 ] && echo dirty || ( [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && echo remote_older || echo other ))"; \
+		}; \
 		rm -f $$TMP_BODY $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: remote differs but local is newer or has local changes; leaving your Makefile untouched.$(NC)"; \
+		echo "Checking for update: your local Makefile has uncommitted changes; not replacing. Set UPDATE_FORCE=1 to force."; \
 		exit 0; \
 	fi
 
@@ -213,15 +228,18 @@ help:
 	@echo "  make pull                   - Pull current module"
 	@echo "  make pull-<Module|All>      - Pull specific module or all"
 	@echo "  make update                 - Force update Makefile from repository"
-	@echo "  make silent                 - Suppress daily update check messages"
+	@echo "  make quiet                  - Suppress daily update check messages"
 	@echo "  make noisy                  - Re-enable daily update check messages"
+	@echo "  (alias: 'make silent' behaves the same as 'make quiet')"
 
 #
-# SILENT/NOISY targets
+# QUIET/NOISY targets ("silent" kept as alias)
 #
-silent:
+quiet:
 	@touch $(MAKEFILE_SILENT_MARKER)
 	@echo -e "$(GREEN)Daily update check messages suppressed. Run 'make noisy' to re-enable.$(NC)"
+
+silent: quiet
 
 noisy:
 	@rm -f $(MAKEFILE_SILENT_MARKER)
@@ -245,6 +263,7 @@ update:
 			echo -e "$(GREEN)you have the newest version.$(NC)"; \
 			exit 0; \
 		fi; \
+		# gather local/remote metadata \
 		LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
 		REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
 		if [ -n "$$REM_LM" ]; then \
@@ -252,10 +271,25 @@ update:
 		else \
 			REM_EPOCH=0; \
 		fi; \
-		if [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$UPDATE_FORCE" != "1" ]; then \
+		# refuse overwrite if local Makefile has uncommitted changes unless forced \
+		IS_DIRTY=0; \
+		if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
+			if ! (git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile); then IS_DIRTY=1; fi; \
+		fi; \
+		if [ "$$IS_DIRTY" -eq 1 ] && [ "$$UPDATE_FORCE" != "1" ]; then \
 			rm -f $$TMP_BODY $$TMP_HEAD; \
-			echo -e "$(YELLOW)remote Makefile appears older than your local copy; not replacing. Set UPDATE_FORCE=1 to force.$(NC)"; \
+			echo -e "$(YELLOW)your local Makefile has uncommitted changes; not replacing. Set UPDATE_FORCE=1 to force.$(NC)"; \
 			exit 0; \
+		fi; \
+		if [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$UPDATE_FORCE" != "1" ]; then \
+			rm -f $$TMP_BODY $$TMP_HEAD; \
+			echo -e "$(YELLOW)remote Last-Modified is older than local mtime; not replacing due to UPDATE_TRUST_TIMESTAMP=1. Set UPDATE_FORCE=1 to force or unset UPDATE_TRUST_TIMESTAMP.$(NC)"; \
+			exit 0; \
+		fi; \
+		if [ -n "$$UPDATE_DEBUG" ]; then \
+			LHS=$$(sha256sum Makefile 2>/dev/null | awk '{print $$1}'); \
+			RHS=$$(sha256sum $$TMP_BODY 2>/dev/null | awk '{print $$1}'); \
+			printf "[update debug]\n  url=%s\n  local_epoch=%s\n  remote_last_modified=%s\n  remote_epoch=%s\n  local_sha256=%s\n  remote_sha256=%s\n" "$(MAKEFILE_REPO_URL)" "$$LOCAL_EPOCH" "$$REM_LM" "$$REM_EPOCH" "$$LHS" "$$RHS"; \
 		fi; \
 		mv -f $$TMP_BODY Makefile; \
 		rm -f $$TMP_HEAD; \
