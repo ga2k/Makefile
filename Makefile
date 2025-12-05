@@ -13,7 +13,7 @@
 # Variables used by update/silent targets
 MAKEFILE_UPDATE_MARKER := .makefile_update_check
 MAKEFILE_SILENT_MARKER := .makefile_silent
-MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/main/Makefile
+MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/master/Makefile
 TODAY := $(shell date +%Y-%m-%d)
 
 # Color output (use -e with echo for these to work)
@@ -46,18 +46,48 @@ __autoupdate:
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
 		exit 0; \
 	fi; \
-	MM=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
-	MD=$$(date -u -r $$MM '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MM '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
-	RESP=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MD" -o Makefile.new.autoupdate "$(MAKEFILE_REPO_URL)"); \
-	if [ "$$RESP" = "200" ]; then \
-		mv -f Makefile.new.autoupdate Makefile; \
+	TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
+	TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
+	if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
+		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: network error; skipping$(NC)"; \
+		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		rm -f $$TMP_BODY $$TMP_HEAD; \
+		exit 0; \
+	fi; \
+	if cmp -s $$TMP_BODY Makefile; then \
+		rm -f $$TMP_BODY $$TMP_HEAD; \
+		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
+		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(GREEN)Your Makefile is up to date.$(NC)"; \
+		exit 0; \
+	fi; \
+	IS_DIRTY=1; \
+	if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
+		if git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
+			if git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile; then IS_DIRTY=0; fi; \
+		fi; \
+	else \
+		IS_DIRTY=1; \
+	fi; \
+	LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
+	REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
+	if [ -n "$$REM_LM" ]; then \
+		REM_EPOCH=$$(date -u -d "$$REM_LM" +%s 2>/dev/null || date -u -j -f '%a, %d %b %Y %H:%M:%S %Z' "$$REM_LM" +%s 2>/dev/null || echo 0); \
+	else \
+		REM_EPOCH=0; \
+	fi; \
+	SHOULD_REPLACE=0; \
+	if [ "$$REM_EPOCH" -ge "$$LOCAL_EPOCH" ]; then SHOULD_REPLACE=1; fi; \
+	if [ "$$IS_DIRTY" -ne 0 ]; then SHOULD_REPLACE=0; fi; \
+	if [ "$$SHOULD_REPLACE" -eq 1 ]; then \
+		mv -f $$TMP_BODY Makefile; \
+		rm -f $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
 		echo -e "$(GREEN)Your Makefile was updated. Please re-run your make command.$(NC)"; \
 		exit 2; \
 	else \
-		rm -f Makefile.new.autoupdate; \
+		rm -f $$TMP_BODY $$TMP_HEAD; \
 		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(GREEN)Your Makefile is up to date.$(NC)"; \
+		[ "$$IS_SILENT" -eq 1 ] || echo -e "$(YELLOW)Auto-update: remote differs but local is newer or has local changes; leaving your Makefile untouched.$(NC)"; \
 		exit 0; \
 	fi
 
@@ -203,17 +233,34 @@ noisy:
 update:
 	@printf "Checking for update: "
 	@if command -v curl >/dev/null 2>&1; then \
-		MY_MTIME=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null); \
-		MY_DATE=$$(date -u -r $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null || date -u -j -f %s $$MY_MTIME '+%a, %d %b %Y %H:%M:%S GMT' 2>/dev/null); \
-		RESPONSE=$$(curl -sL -w '%{http_code}' -H "If-Modified-Since: $$MY_DATE" -o /tmp/Makefile.new "$(MAKEFILE_REPO_URL)"); \
-		if [ "$$RESPONSE" = "200" ]; then \
-			cp /tmp/Makefile.new Makefile; \
-			rm -f /tmp/Makefile.new; \
-			echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-			echo -e "$(GREEN)your version was updated. Please re-run your make command.$(NC)"; \
-		else \
-			echo -e "$(GREEN)you have the newest version.$(NC)"; \
+		TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
+		TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
+		if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
+			rm -f $$TMP_BODY $$TMP_HEAD; \
+			echo -e "$(RED)ERROR: failed to download remote Makefile.$(NC)"; \
+			exit 1; \
 		fi; \
+		if cmp -s $$TMP_BODY Makefile; then \
+			rm -f $$TMP_BODY $$TMP_HEAD; \
+			echo -e "$(GREEN)you have the newest version.$(NC)"; \
+			exit 0; \
+		fi; \
+		LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
+		REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
+		if [ -n "$$REM_LM" ]; then \
+			REM_EPOCH=$$(date -u -d "$$REM_LM" +%s 2>/dev/null || date -u -j -f '%a, %d %b %Y %H:%M:%S %Z' "$$REM_LM" +%s 2>/dev/null || echo 0); \
+		else \
+			REM_EPOCH=0; \
+		fi; \
+		if [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$UPDATE_FORCE" != "1" ]; then \
+			rm -f $$TMP_BODY $$TMP_HEAD; \
+			echo -e "$(YELLOW)remote Makefile appears older than your local copy; not replacing. Set UPDATE_FORCE=1 to force.$(NC)"; \
+			exit 0; \
+		fi; \
+		mv -f $$TMP_BODY Makefile; \
+		rm -f $$TMP_HEAD; \
+		echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
+		echo -e "$(GREEN)your version was updated. Please re-run your make command.$(NC)"; \
 	else \
 		echo -e "$(RED)ERROR: curl not found. Cannot update Makefile.$(NC)"; \
 		exit 1; \
