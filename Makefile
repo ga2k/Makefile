@@ -1,10 +1,11 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate default
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate
-.DEFAULT_GOAL := help
+# Default target will be overridden later to implement requested behavior
+.DEFAULT_GOAL := default
 
 # Auto-update implementation
 # This runs once at the start of any requested target (except update/quiet/silent/noisy),
@@ -119,10 +120,12 @@ MONOREPO := $(shell grep -E '^MONOREPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\
 MODULES := $(shell grep -E '^MODULES\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^#]*\).*/\1/')
 STAGEDIR := $(shell grep -E '^STAGEDIR\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 PRESET_FILE := $(shell grep -E '^PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
+EXECUTABLE := $(shell grep -E '^EXECUTABLE\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 
 # Set defaults
 STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
 PRESET := $(if $(PRESET),$(PRESET),$(if $(PRESET_FILE),$(PRESET_FILE),default))
+EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
 
 # Expand tilde in STAGEDIR
 STAGEDIR := $(shell echo $(STAGEDIR))
@@ -214,13 +217,14 @@ help:
 	@echo "Modules: $(MODULES)"
 	@echo "Stage Dir: $(STAGEDIR)"
 	@echo "Preset: $(PRESET)"
+	@echo "Executable: $(EXECUTABLE)"
 	@echo ""
 	@echo "Available targets:"
 	@echo "  make clean                  - Clean current module"
 	@echo "  make config                 - Configure current module"
 	@echo "  make build                  - Build current module (auto-configures if needed)"
-	@echo "  make stage                  - Stage current module to STAGEDIR"
-	@echo "  make install                - Install current module (requires sudo)"
+	@echo "  make stage                  - Stage current module to STAGEDIR (unavailable if EXECUTABLE=true)"
+	@echo "  make install                - Install current module (requires sudo; unavailable if EXECUTABLE=true)"
 	@echo "  make clean-<Module|All>     - Clean specific module or all"
 	@echo "  make config-<Module|All>    - Configure specific module or all"
 	@echo "  make build-<Module|All>     - Build specific module or all"
@@ -234,6 +238,34 @@ help:
 	@echo "  make quiet                  - Suppress daily update check messages"
 	@echo "  make noisy                  - Re-enable daily update check messages"
 	@echo "  (alias: 'make silent' behaves the same as 'make quiet')"
+	@echo ""
+	@echo "Default target behavior:"
+	@echo "  - In module directories: if EXECUTABLE=true -> build; else -> stage"
+	@echo "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES"
+
+# New default target per requirements
+default:
+ifeq ($(MODE),monorepo)
+	@echo -e "$(GREEN)Running default target in all modules: $(MODULES)$(NC)"
+	@ret=0; \
+	for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			echo -e "$(YELLOW)> $$mod: make (default)$(NC)"; \
+			( cd "$$mod" && $(MAKE) ) || ret=1; \
+		else \
+			echo -e "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)"; \
+		fi; \
+	done; \
+	exit $$ret
+else
+ifeq ($(strip $(EXECUTABLE)),true)
+	@echo -e "$(GREEN)EXECUTABLE=true: running build by default$(NC)"
+	@$(MAKE) build
+else
+	@echo -e "$(GREEN)EXECUTABLE=false: running stage by default$(NC)"
+	@$(MAKE) stage
+endif
+endif
 
 #
 # QUIET/NOISY targets ("silent" kept as alias)
@@ -469,16 +501,24 @@ ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for stage-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) stage-All
 else
+ifeq ($(strip $(EXECUTABLE)),true)
+	@echo -e "$(RED)ERROR: 'stage' is unavailable when EXECUTABLE=true$(NC)"; exit 1
+else
 	@echo -e "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)/$(CURRENT_DIR)$(NC)"
 	@mkdir -p $(STAGEDIR)/$(CURRENT_DIR)
 	@mkdir -p build/debug/shared
 	@$(call run_build,--target install,$(STAGEDIR)/$(CURRENT_DIR)) || \
 		(echo -e "$(RED)Stage failed for $(CURRENT_DIR)$(NC)" && exit 1)
 endif
+endif
 
 define stage_module
 	@echo -e "$(GREEN)Staging module: $(1) to $(STAGEDIR)/$(1)$(NC)"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
+		if [ -f "$(MODULE_PREFIX)/$(1)/.modules" ] && \
+		   grep -Eq '^[[:space:]]*EXECUTABLE[[:space:]]*:=[[:space:]]*true' "$(MODULE_PREFIX)/$(1)/.modules"; then \
+			echo -e "$(RED)ERROR: 'stage' is unavailable for EXECUTABLE=true module: $(1)$(NC)"; exit 1; \
+		fi; \
 		mkdir -p $(STAGEDIR)/$(1) && \
 		cd $(MODULE_PREFIX)/$(1) && \
 		DESTDIR=$(STAGEDIR)/$(1) cmake --build --preset "$(PRESET)" --target install || \
@@ -526,14 +566,22 @@ ifeq ($(MODE),monorepo)
 	@echo -e "$(YELLOW)Delegating to first module for install-All...$(NC)"
 	@cd $(word 1,$(MODULES)) && $(MAKE) install-All
 else
+ifeq ($(strip $(EXECUTABLE)),true)
+	@echo -e "$(RED)ERROR: 'install' is unavailable when EXECUTABLE=true$(NC)"; exit 1
+else
 	@echo -e "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)"
 	@sudo cmake --build --preset "$(PRESET)" --target install || \
 		(echo -e "$(RED)Install failed for $(CURRENT_DIR)$(NC)" && exit 1)
+endif
 endif
 
 define install_module
 	@echo -e "$(GREEN)Installing module: $(1) (requires sudo)$(NC)"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
+		if [ -f "$(MODULE_PREFIX)/$(1)/.modules" ] && \
+		   grep -Eq '^[[:space:]]*EXECUTABLE[[:space:]]*:=[[:space:]]*true' "$(MODULE_PREFIX)/$(1)/.modules"; then \
+			echo -e "$(RED)ERROR: 'install' is unavailable for EXECUTABLE=true module: $(1)$(NC)"; exit 1; \
+		fi; \
 		cd $(MODULE_PREFIX)/$(1) && \
 		sudo cmake --build --preset "$(PRESET)" --target install || \
 		(echo -e "$(RED)Install failed for $(1)$(NC)" && exit 1); \
