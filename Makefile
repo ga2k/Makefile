@@ -28,6 +28,7 @@ NC := \033[0m # No Color
 # Export MSG and PRESET for recursive make calls
 export MSG
 export PRESET
+export FORCE
 
 # Ensure auto-update runs before the user's goals (skip for update/silent/noisy)
 AUTOUPDATE_SKIP_GOALS := update quiet silent noisy
@@ -286,6 +287,8 @@ noisy:
 update:
 	@printf "Checking for update: "
 	@if command -v curl >/dev/null 2>&1; then \
+		FORCE_UPDATE=0; \
+		if [ "$(FORCE)" = "TRUE" ] || [ "$$UPDATE_FORCE" = "1" ]; then FORCE_UPDATE=1; fi; \
 		TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
 		TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
 		if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
@@ -311,14 +314,14 @@ update:
 		if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
 			if ! (git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile); then IS_DIRTY=1; fi; \
 		fi; \
-		if [ "$$IS_DIRTY" -eq 1 ] && [ "$$UPDATE_FORCE" != "1" ]; then \
+		if [ "$$IS_DIRTY" -eq 1 ] && [ "$$FORCE_UPDATE" -ne 1 ]; then \
 			rm -f $$TMP_BODY $$TMP_HEAD; \
-			echo -e "$(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Set UPDATE_FORCE=1 to force.$(NC)"; \
+			echo -e "$(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Use FORCE=TRUE or UPDATE_FORCE=1 to force.$(NC)"; \
 			exit 0; \
 		fi; \
-		if [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$UPDATE_FORCE" != "1" ]; then \
+		if [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$FORCE_UPDATE" -ne 1 ]; then \
 			rm -f $$TMP_BODY $$TMP_HEAD; \
-			echo -e "$(YELLOW)remote Last-Modified is older than local mtime; not replacing due to UPDATE_TRUST_TIMESTAMP=1. Set UPDATE_FORCE=1 to force or unset UPDATE_TRUST_TIMESTAMP.$(NC)"; \
+			echo -e "$(YELLOW)remote Last-Modified is older than local mtime; not replacing due to UPDATE_TRUST_TIMESTAMP=1. Use FORCE=TRUE or UPDATE_FORCE=1 to force or unset UPDATE_TRUST_TIMESTAMP.$(NC)"; \
 			exit 0; \
 		fi; \
 		if [ -n "$$UPDATE_DEBUG" ]; then \
@@ -504,24 +507,23 @@ else
 ifeq ($(strip $(EXECUTABLE)),true)
 	@echo -e "$(RED)ERROR: 'stage' is unavailable when EXECUTABLE=true$(NC)"; exit 1
 else
-	@echo -e "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)/$(CURRENT_DIR)$(NC)"
-	@mkdir -p $(STAGEDIR)/$(CURRENT_DIR)
-	@mkdir -p build/debug/shared
-	@$(call run_build,--target install,$(STAGEDIR)/$(CURRENT_DIR)) || \
+	@echo -e "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)"
+	@mkdir -p $(STAGEDIR)
+	@$(call run_build,--target install,$(STAGEDIR)) || \
 		(echo -e "$(RED)Stage failed for $(CURRENT_DIR)$(NC)" && exit 1)
 endif
 endif
 
-define stage_module
-	@echo -e "$(GREEN)Staging module: $(1) to $(STAGEDIR)/$(1)$(NC)"
+define stage_module 
+	@echo -e "$(GREEN)Staging module: $(1) to $(STAGEDIR)$(NC)"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		if [ -f "$(MODULE_PREFIX)/$(1)/.modules" ] && \
 		   grep -Eq '^[[:space:]]*EXECUTABLE[[:space:]]*:=[[:space:]]*true' "$(MODULE_PREFIX)/$(1)/.modules"; then \
 			echo -e "$(RED)ERROR: 'stage' is unavailable for EXECUTABLE=true module: $(1)$(NC)"; exit 1; \
 		fi; \
-		mkdir -p $(STAGEDIR)/$(1) && \
+		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR)/$(1) cmake --build --preset "$(PRESET)" --target install || \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install || \
 		(echo -e "$(RED)Stage failed for $(1)$(NC)" && exit 1); \
 	else \
 		echo -e "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)"; \
