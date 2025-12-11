@@ -173,16 +173,25 @@ BUILD_DIR := build
 
 # Auto-generate CMakePresets.json if it doesn't exist but the template does
 ifeq (,$(wildcard CMakePresets.json))
-ifneq (,$(wildcard CMakePresets.in))
+ifneq (,$(wildcard cmake/CMakePresets.in))
 ifneq (,$(wildcard cmake/filter-presets.py))
-$(shell python3 cmake/filter-presets.py CMakePresets.in CMakePresets.json)
-$(info Generated CMakePresets.json from CMakePresets.in)
+$(shell python3 cmake/filter-presets.py cmake/CMakePresets.in CMakePresets.json)
+$(info Generated CMakePresets.json from cmake/CMakePresets.in)
 endif
 endif
 endif
 
+# Helper: ensure CMakePresets.json exists before running CMake commands
+define ensure_presets
+	@if [ ! -f CMakePresets.json ] && [ -f cmake/CMakePresets.in ] && [ -f cmake/filter-presets.py ]; then \
+		echo -e "$(YELLOW)Generating CMakePresets.json...$(NC)"; \
+		python3 cmake/filter-presets.py cmake/CMakePresets.in CMakePresets.json || exit 1; \
+	fi
+endef
+
 # Helper: configure with preset when CMakePresets.json exists
 define run_config
+	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
 		echo -e "$(GREEN)Configuring with preset $(PRESET)$(NC)"; \
 		cmake --preset "$(PRESET)"; \
@@ -197,6 +206,7 @@ endef
 # If destdir is provided, it will be set as DESTDIR environment variable
 # Auto-configures if build directory doesn't exist
 define run_build
+	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
 		if ! cmake --build --preset "$(PRESET)" --target help >/dev/null 2>&1; then \
 			echo -e "$(YELLOW)Build cache not found, configuring first...$(NC)"; \
