@@ -173,19 +173,19 @@ BUILD_DIR := build
 
 # Auto-generate CMakePresets.json if it doesn't exist but the template does
 ifeq (,$(wildcard CMakePresets.json))
-ifneq (,$(wildcard cmake/CMakePresets.in))
+ifneq (,$(wildcard cmake/templates/CMakePresets.in))
 ifneq (,$(wildcard cmake/filter-presets.py))
-$(shell python3 cmake/filter-presets.py cmake/CMakePresets.in CMakePresets.json)
-$(info Generated CMakePresets.json from cmake/CMakePresets.in)
+$(shell python3 cmake/filter-presets.py cmake/templates/CMakePresets.in CMakePresets.json)
+$(info Generated CMakePresets.json from cmake/templates/CMakePresets.in)
 endif
 endif
 endif
 
 # Helper: ensure CMakePresets.json exists before running CMake commands
 define ensure_presets
-	@if [ ! -f CMakePresets.json ] && [ -f cmake/CMakePresets.in ] && [ -f cmake/filter-presets.py ]; then \
+	@if [ ! -f CMakePresets.json ] && [ -f cmake/templates/CMakePresets.in ] && [ -f cmake/filter-presets.py ]; then \
 		printf "$(YELLOW)Generating CMakePresets.json...$(NC)\n"; \
-		python3 cmake/filter-presets.py cmake/CMakePresets.in CMakePresets.json || exit 1; \
+		python3 cmake/filter-presets.py cmake/templates/CMakePresets.in CMakePresets.json || exit 1; \
 	fi
 endef
 
