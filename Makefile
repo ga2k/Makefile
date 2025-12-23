@@ -1,5 +1,14 @@
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
+ifeq ($(OS),Windows_NT)
+    # 1. Force Make to use sh.exe so your pipe/sed logic works
+    SHELL := sh.exe
+
+    # 2. Add the Git 'usr/bin' folder to the path (where grep and sed live)
+    # Using ':=' for immediate evaluation. Adjust the path below if yours is different.
+    GIT_BIN := /c/Program Files/Git/usr/bin
+    export PATH := $(GIT_BIN):$(PATH)
+endif
 
 .PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate default
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
