@@ -219,7 +219,7 @@ define run_build
 	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
 		if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
-			ls $(BUILD_DIR) \
+			ls "$(BUILD_DIR)" \
 			printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
 			cmake --preset "$(PRESET)" || exit 1; \
 		fi; \
