@@ -214,10 +214,11 @@ endef
 # Usage: $(call run_build,<cmake-args>,<destdir>)
 # If destdir is provided, it will be set as DESTDIR environment variable
 # Auto-configures if build directory doesn't exist
+#		if ! cmake --build --preset "$(PRESET)" --target help >/dev/null 2>&1; then \
 define run_build
 	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
-		if ! cmake --build --preset "$(PRESET)" --target help >/dev/null 2>&1; then \
+		if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
 			printf "$(YELLOW)Build cache not found, configuring first...$(NC)\n"; \
 			cmake --preset "$(PRESET)" || exit 1; \
 		fi; \
