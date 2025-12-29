@@ -363,53 +363,22 @@ update:
 #
 clean:
 ifeq ($(MODE),monorepo)
-	@printf "$(YELLOW)Delegating to first module for clean-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) clean-All
+	@for mod in $(MODULES); do \
+		printf "$(GREEN)Cleaning module: $$mod$(NC)\n"; \
+		if [ -d "$$mod" ]; then \
+			rm -rf "$$mod/build" "$$mod/out"; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi \
+	done;
+	@printf "$(GREEN)Cleaning monorepo$(NC)\n";
+	@rm -rf build out;
+	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n";
+	@rm -rf $(STAGEDIR);
 else
 	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
 	@rm -rf build out
 endif
-
-define clean_module
-	@printf "$(GREEN)Cleaning module: $(1)$(NC)\n"
-	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && rm -rf build out; \
-	else \
-		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
-	fi
-endef
-
-clean-%:
-	$(call validate_module,$*)
-ifeq ($(MODE),monorepo)
-ifeq ($*,All)
-	@printf "$(YELLOW)Delegating to first module for clean-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) clean-All
-else
-	@printf "$(YELLOW)Delegating to module $* for clean...$(NC)\n"
-	@if [ -d "$*" ]; then \
-		cd $* && $(MAKE) clean; \
-	else \
-		printf "$(RED)ERROR: Module $* does not exist$(NC)\n"; \
-		exit 1; \
-	fi
-endif
-else
-ifeq ($*,All)
-	@printf "$(GREEN)Cleaning all modules$(NC)\n"
-	@for mod in $(MODULES); do \
-		$(MAKE) clean_module_impl MODULE=$$mod; \
-	done
-	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n"
-	@rm -rf $(STAGEDIR)
-else
-	$(call check_module_exists,$*)
-	$(call clean_module,$*)
-endif
-endif
-
-clean_module_impl:
-	$(call clean_module,$(MODULE))
 
 #
 # CONFIG targets
