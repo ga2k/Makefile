@@ -10,7 +10,7 @@ ifeq ($(OS),Windows_NT)
     export PATH := $(GIT_BIN):$(PATH)
 endif
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate default
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate
 # Default target will be overridden later to implement requested behavior
@@ -137,6 +137,76 @@ STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
 PRESET := $(if $(PRESET),$(PRESET),$(if $(PRESET_FILE),$(PRESET_FILE),default))
 EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
 
+# Extract both binaryDir and the environment variables from the preset
+# This gets complex because we need to follow inheritance chains
+define get_preset_info
+$(shell python3 -c '
+import json
+import sys
+
+def get_preset_with_inheritance(presets, name, visited=None):
+    if visited is None:
+        visited = set()
+    if name in visited:
+        return {}
+    visited.add(name)
+
+    preset = next((p for p in presets if p.get("name") == name), None)
+    if not preset:
+        return {}
+
+    # Start with inherited values
+    result = {"environment": {}, "cacheVariables": {}}
+    for parent_name in preset.get("inherits", []):
+        parent = get_preset_with_inheritance(presets, parent_name, visited)
+        result["environment"].update(parent.get("environment", {}))
+        result["cacheVariables"].update(parent.get("cacheVariables", {}))
+
+    # Override with current preset values
+    result["environment"].update(preset.get("environment", {}))
+    result["cacheVariables"].update(preset.get("cacheVariables", {}))
+    result["binaryDir"] = preset.get("binaryDir", "")
+
+    return result
+
+with open("CMakePresets.json") as f:
+    data = json.load(f)
+
+preset = get_preset_with_inheritance(data["configurePresets"], "$(PRESET)")
+binary_dir = preset.get("binaryDir", "")
+
+# Resolve environment variables in binaryDir
+import re
+def resolve_env(match):
+    var_name = match.group(1)
+    return preset["environment"].get(var_name, "")
+
+binary_dir = re.sub(r"\$$env\{([^}]+)\}", resolve_env, binary_dir)
+print(binary_dir, end="")
+')
+endef
+
+BINARY_DIR := $(get_preset_info)
+
+.PHONY: show-binary-dir
+show-binary-dir:
+	@echo "Preset: $(PRESET)"
+	@echo "Binary Dir: $(BINARY_DIR)"
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 # Expand tilde in STAGEDIR
 STAGEDIR := $(shell echo $(STAGEDIR))
 
@@ -218,13 +288,13 @@ endef
 define run_build
 	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
-		if [ ! -f "$(BUILD_DIR)/debug/shared/CMakeCache.txt" ]; then \
+		if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
 			printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
 			cmake --preset "$(PRESET)" || exit 1; \
 		fi; \
 		$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1); \
 	else \
-		if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
+		if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
 			printf "$(YELLOW)Build cache not found, configuring first...$(NC)\n"; \
 			cmake -S . -B $(BUILD_DIR) || exit 1; \
 		fi; \
@@ -258,6 +328,8 @@ help:
 	@echo "  make update                 - Force update Makefile from repository"
 	@echo "  make quiet                  - Suppress daily update check messages"
 	@echo "  make noisy                  - Re-enable daily update check messages"
+	@echo "  show-binary-dir             - Display the binary dir for this preset"
+	@echo ""
 	@echo "  (alias: 'make silent' behaves the same as 'make quiet')"
 	@echo ""
 	@echo "Default target behavior:"
