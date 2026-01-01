@@ -444,12 +444,12 @@ ifeq ($(MODE),monorepo)
 		fi \
 	done;
 	@printf "$(GREEN)Cleaning monorepo$(NC)\n";
-	@rm -rf build out;
+	@rm -rf build out external;
 	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n";
 	@rm -rf $(STAGEDIR);
 else
 	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
-	@rm -rf build out
+	@rm -rf build out external
 endif
 
 #
