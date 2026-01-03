@@ -193,20 +193,6 @@ show-binary-dir:
 	@echo "Preset: $(PRESET)"
 	@echo "Binary Dir: $(BINARY_DIR)"
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 # Expand tilde in STAGEDIR
 STAGEDIR := $(shell echo $(STAGEDIR))
 
@@ -284,7 +270,6 @@ endef
 # Usage: $(call run_build,<cmake-args>,<destdir>)
 # If destdir is provided, it will be set as DESTDIR environment variable
 # Auto-configures if build directory doesn't exist
-#		if ! cmake --build --preset "$(PRESET)" --target help >/dev/null 2>&1; then
 define run_build
 	$(call ensure_presets)
 	@if [ -f CMakePresets.json ]; then \
@@ -336,7 +321,7 @@ help:
 	@echo "  - In module directories: if EXECUTABLE=true -> build; else -> stage"
 	@echo "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES"
 
-# New default target per requirements
+# Default target
 default:
 ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Running default target in all modules: $(MODULES)$(NC)\n"
@@ -361,7 +346,7 @@ endif
 endif
 
 #
-# QUIET/NOISY targets ("silent" kept as alias)
+# QUIET/NOISY targets
 #
 quiet:
 	@touch $(MAKEFILE_SILENT_MARKER)
@@ -393,7 +378,6 @@ update:
 			printf "$(GREEN)you have the newest version.$(NC)\n"; \
 			exit 0; \
 		fi; \
-		# gather local/remote metadata \
 		LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
 		REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
 		if [ -n "$$REM_LM" ]; then \
@@ -401,7 +385,6 @@ update:
 		else \
 			REM_EPOCH=0; \
 		fi; \
-		# refuse overwrite if local Makefile has uncommitted changes unless forced \
 		IS_DIRTY=0; \
 		if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
 			if ! (git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile); then IS_DIRTY=1; fi; \
@@ -410,16 +393,6 @@ update:
 			rm -f $$TMP_BODY $$TMP_HEAD; \
 			printf "$(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Use FORCE=TRUE or UPDATE_FORCE=1 to force.$(NC)\n"; \
 			exit 0; \
-		fi; \
-		if [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && [ "$$FORCE_UPDATE" -ne 1 ]; then \
-			rm -f $$TMP_BODY $$TMP_HEAD; \
-			printf "$(YELLOW)remote Last-Modified is older than local mtime; not replacing due to UPDATE_TRUST_TIMESTAMP=1. Use FORCE=TRUE or UPDATE_FORCE=1 to force or unset UPDATE_TRUST_TIMESTAMP.$(NC)\n"; \
-			exit 0; \
-		fi; \
-		if [ -n "$$UPDATE_DEBUG" ]; then \
-			LHS=$$(sha256sum Makefile 2>/dev/null | awk '{print $$1}'); \
-			RHS=$$(sha256sum $$TMP_BODY 2>/dev/null | awk '{print $$1}'); \
-			printf "[update debug]\n  url=%s\n  local_epoch=%s\n  remote_last_modified=%s\n  remote_epoch=%s\n  local_sha256=%s\n  remote_sha256=%s\n" "$(MAKEFILE_REPO_URL)" "$$LOCAL_EPOCH" "$$REM_LM" "$$REM_EPOCH" "$$LHS" "$$RHS\n"; \
 		fi; \
 		mv -f $$TMP_BODY Makefile; \
 		rm -f $$TMP_HEAD; \
@@ -457,8 +430,15 @@ endif
 #
 config:
 ifeq ($(MODE),monorepo)
-	@printf "$(YELLOW)Delegating to first module for config-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
+	@printf "$(GREEN)Configuring all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) config || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(GREEN)Configuring current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
 	@$(call run_config) || (printf "$(RED)Configure failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
@@ -478,8 +458,15 @@ config-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(YELLOW)Delegating to first module for config-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) config-All
+	@printf "$(GREEN)Configuring all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) config || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(YELLOW)Delegating to module $* for config...$(NC)\n"
 	@if [ -d "$*" ]; then \
@@ -509,8 +496,15 @@ config_module_impl:
 #
 build:
 ifeq ($(MODE),monorepo)
-	@printf "$(YELLOW)Delegating to first module for build-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) build-All
+	@printf "$(GREEN)Building all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) build || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(GREEN)Building current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
 	@mkdir -p build/debug/shared
@@ -531,8 +525,15 @@ build-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(YELLOW)Delegating to first module for build-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) build-All
+	@printf "$(GREEN)Building all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) build || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(YELLOW)Delegating to module $* for build...$(NC)\n"
 	@if [ -d "$*" ]; then \
@@ -562,8 +563,15 @@ build_module_impl:
 #
 stage:
 ifeq ($(MODE),monorepo)
-	@printf "$(YELLOW)Delegating to first module for stage-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) stage-All
+	@printf "$(GREEN)Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) stage || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 ifeq ($(strip $(EXECUTABLE)),true)
 	@printf "$(RED)ERROR: 'stage' is unavailable when EXECUTABLE=true$(NC)\n"; exit 1
@@ -595,8 +603,15 @@ stage-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(YELLOW)Delegating to first module for stage-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) stage-All
+	@printf "$(GREEN)Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) stage || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(YELLOW)Delegating to module $* for stage...$(NC)\n"
 	@if [ -d "$*" ]; then \
@@ -626,8 +641,15 @@ stage_module_impl:
 #
 install:
 ifeq ($(MODE),monorepo)
-	@printf "$(YELLOW)Delegating to first module for install-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) install-All
+	@printf "$(GREEN)Installing all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) install || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 ifeq ($(strip $(EXECUTABLE)),true)
 	@printf "$(RED)ERROR: 'install' is unavailable when EXECUTABLE=true$(NC)\n"; exit 1
@@ -657,8 +679,15 @@ install-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(YELLOW)Delegating to first module for install-All...$(NC)\n"
-	@cd $(word 1,$(MODULES)) && $(MAKE) install-All
+	@printf "$(GREEN)Installing all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) install || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
 else
 	@printf "$(YELLOW)Delegating to module $* for install...$(NC)\n"
 	@if [ -d "$*" ]; then \
