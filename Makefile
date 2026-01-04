@@ -267,8 +267,8 @@ endef
 #endef
 define run_config
 	$(call ensure_presets)
-	printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n";
-	cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)";
+	printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"
+	cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)"
 endef
 
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
@@ -280,8 +280,8 @@ define run_build
 	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
 		cmake --preset "$(PRESET)" || exit 1; \
-	fi;
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1);
+	fi
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
 
 help:
@@ -504,7 +504,7 @@ ifeq ($(MODE),monorepo)
 	done
 else
 	@printf "$(GREEN)Building current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
-	@mkdir -p build/debug/shared
+	@mkdir -p $(BINARY_DIR)
 	@$(call run_build,) || (printf "$(RED)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
