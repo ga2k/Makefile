@@ -255,15 +255,20 @@ define ensure_presets
 endef
 
 # Helper: configure with preset when CMakePresets.json exists
+#define run_config
+#	$(call ensure_presets)
+#	@if [ -f CMakePresets.json ]; then \
+#		printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"; \
+#		cmake --preset "$(PRESET)"; \
+#	else \
+#		printf "$(GREEN)Configuring in $(BUILD_DIR)$(NC)\n"; \
+#		cmake -S . -B $(BUILD_DIR); \
+#	fi
+#endef
 define run_config
 	$(call ensure_presets)
-	@if [ -f CMakePresets.json ]; then \
-		printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"; \
-		cmake --preset "$(PRESET)"; \
-	else \
-		printf "$(GREEN)Configuring in $(BUILD_DIR)$(NC)\n"; \
-		cmake -S . -B $(BUILD_DIR); \
-	fi
+	printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n";
+	cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)";
 endef
 
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
@@ -272,19 +277,11 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call ensure_presets)
-	@if [ -f CMakePresets.json ]; then \
-		if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
-			printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-			cmake --preset "$(PRESET)" || exit 1; \
-		fi; \
-		$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1); \
-	else \
-		if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
-			printf "$(YELLOW)Build cache not found, configuring first...$(NC)\n"; \
-			cmake -S . -B $(BUILD_DIR) || exit 1; \
-		fi; \
-		$(if $(2),DESTDIR=$(2)) cmake --build $(BUILD_DIR) $(1); \
-	fi
+	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
+		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
+		cmake --preset "$(PRESET)" || exit 1; \
+	fi;
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1);
 endef
 
 help:
