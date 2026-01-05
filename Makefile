@@ -775,7 +775,7 @@ push-All:
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			printf "$(GREEN)Pushing module: $$mod$(NC)\n"; \
-			cd $$mod && { $(MAKE) pull; $(MAKE) push MSG="$(MSG)" } || exit 1; \
+			cd $$mod && { $(MAKE) pull; $(MAKE) push MSG="$(MSG)"; } || exit 1; \
 			cd - >/dev/null; \
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
