@@ -222,7 +222,10 @@ endif
 
 # Date for auto-commit
 DATE := $(shell date +%Y-%m-%d\ %H:%M:%S)
-MSG ?= auto-commit $(DATE)
+HOSTNAME := $(shell hostname 2>/dev/null || echo $$COMPUTERNAME)
+ifeq ($(strip $(MSG)),)
+    MSG := Pushed from $(HOSTNAME) $(DATE)
+endif
 
 # Helper functions
 define validate_module
