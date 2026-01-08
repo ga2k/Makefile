@@ -222,9 +222,14 @@ endif
 
 # Date for auto-commit
 DATE := $(shell date +%Y-%m-%d\ %H:%M:%S)
+<<<<<<< HEAD
 HOSTNAME := $(shell hostname 2>/dev/null || echo $$COMPUTERNAME)
 ifeq ($(strip $(MSG)),)
     MSG := Pushed from $(HOSTNAME) $(DATE)
+=======
+ifeq ($(strip $(MSG)),)
+    MSG := auto-commit $(DATE)
+>>>>>>> 5be9d04de03c851567bd7e147ac77e12cec2de53
 endif
 
 # Helper functions
