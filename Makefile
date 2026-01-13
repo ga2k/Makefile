@@ -270,8 +270,13 @@ endef
 #endef
 define run_config
 	$(call ensure_presets)
-	printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"
-	cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)"
+	printf "$(GREEN)Configuring with preset $(PRESET)$(NC) "
+	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
+		printf "$(YELLOW)required, configuring...$(NC)\n"; \
+		cmake -S . -B $(c) --preset "$(PRESET)"; \
+	else \
+		printf "$(GREEN)not required, skipping...$(NC)\n"; \
+	fi
 endef
 
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
