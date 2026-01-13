@@ -191,7 +191,7 @@ BINARY_DIR := $(get_preset_info)
 
 .PHONY: show-binary-dir
 show-binary-dir:
-	@echo "Preset: $(PRESET)"
+	@echo "Preset: $(BOLD)$(PRESET)$(NC)"
 	@echo "Binary Dir: $(BINARY_DIR)"
 
 # Expand tilde in STAGEDIR
@@ -298,7 +298,7 @@ help:
 	@echo "Mode: $(MODE)"
 	@echo "Modules: $(MODULES)"
 	@echo "Stage Dir: $(STAGEDIR)"
-	@echo "Preset: $(PRESET)"
+	@echo "Preset: $(BOLD)$(PRESET)$(NC)"
 	@echo "Executable: $(EXECUTABLE)"
 	@echo ""
 	@echo "Available targets:"
@@ -451,7 +451,7 @@ else
 endif
 
 define config_module
-	@printf "$(GREEN)Configuring module: $(1) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Configuring module: $(1) with preset $(BOLD)$(PRESET)$(NC)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" || \
 		(printf "$(RED)Configure failed for $(1)$(NC)\n" && exit 1); \
@@ -474,7 +474,7 @@ ifeq ($*,All)
 		fi; \
 	done
 else
-	@printf "$(YELLOW)Delegating to module $* for config...$(NC)\n"
+	@printf "$(YELLOW)Delegating$(NC) to module $(BOLD)$*$(NC) for config...$(NC)\n"
 	@if [ -d "$*" ]; then \
 		cd $* && $(MAKE) config; \
 	else \
@@ -484,7 +484,7 @@ else
 endif
 else
 ifeq ($*,All)
-	@printf "$(GREEN)Configuring all modules in dependency order$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) all modules in dependency order$(NC)\n"
 	@for mod in $(MODULES); do \
 		$(MAKE) config_module_impl MODULE=$$mod || exit 1; \
 	done
@@ -502,7 +502,7 @@ config_module_impl:
 #
 build:
 ifeq ($(MODE),monorepo)
-	@printf "$(GREEN)Building all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) build || exit 1; \
@@ -512,13 +512,13 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)Building current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@mkdir -p $(BINARY_DIR)
 	@$(call run_build,) || (printf "$(RED)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define build_module
-	@printf "$(GREEN)Building module: $(1) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
