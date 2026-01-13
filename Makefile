@@ -29,6 +29,7 @@ MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/master/Make
 TODAY := $(shell date +%Y-%m-%d)
 
 # Color output (use -e with echo for these to work)
+BOLD := \033[1m
 RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
@@ -270,12 +271,12 @@ endef
 #endef
 define run_config
 	$(call ensure_presets)
-	printf "$(GREEN)Configuring with preset $(PRESET)$(NC) "
-	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
+	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
+	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)"; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
 	else \
-		printf "$(GREEN)not required, skipping...$(NC)\n"; \
+		printf "$(GREEN)not required$(NC), skipping...\n"; \
 	fi
 endef
 
@@ -285,9 +286,9 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call ensure_presets)
-	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
+	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-		cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)" || exit 1; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
 	fi
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
@@ -445,7 +446,7 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)Configuring current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(GREEN)$(PRESET)$(NC)\n"
 	@$(call run_config) || (printf "$(RED)Configure failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
@@ -463,7 +464,7 @@ config-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(GREEN)Configuring all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) config || exit 1; \
