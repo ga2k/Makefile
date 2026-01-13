@@ -29,6 +29,7 @@ MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/master/Make
 TODAY := $(shell date +%Y-%m-%d)
 
 # Color output (use -e with echo for these to work)
+BOLD := \033[1m
 RED := \033[0;31m
 GREEN := \033[0;32m
 YELLOW := \033[1;33m
@@ -190,7 +191,7 @@ BINARY_DIR := $(get_preset_info)
 
 .PHONY: show-binary-dir
 show-binary-dir:
-	@echo "Preset: $(PRESET)"
+	@echo "Preset: $(BOLD)$(PRESET)$(NC)"
 	@echo "Binary Dir: $(BINARY_DIR)"
 
 # Expand tilde in STAGEDIR
@@ -270,8 +271,13 @@ endef
 #endef
 define run_config
 	$(call ensure_presets)
-	printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"
-	cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)"
+	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
+	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
+		printf "$(YELLOW)required, configuring...$(NC)\n"; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
+	else \
+		printf "$(GREEN)not required$(NC), skipping...\n"; \
+	fi
 endef
 
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
@@ -279,47 +285,46 @@ endef
 # If destdir is provided, it will be set as DESTDIR environment variable
 # Auto-configures if build directory doesn't exist
 define run_build
-	$(call ensure_presets)
-	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
-		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-		cmake --preset "$(PRESET)" || exit 1; \
-	fi
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
+	$(call run_config)
+	$(if $(2),DESTDIR=$(2)) cmake --build $(BINARY_DIR) --preset "$(PRESET)" $(1)
+
+
+	cmake --build --preset "$(PRESET)"
 endef
 
 help:
 	@printf "$(GREEN)Multi-Module CMake Build System$(NC)\n"
-	@echo "Mode: $(MODE)"
-	@echo "Modules: $(MODULES)"
-	@echo "Stage Dir: $(STAGEDIR)"
-	@echo "Preset: $(PRESET)"
-	@echo "Executable: $(EXECUTABLE)"
-	@echo ""
-	@echo "Available targets:"
-	@echo "  make clean                  - Clean current module"
-	@echo "  make config                 - Configure current module"
-	@echo "  make build                  - Build current module (auto-configures if needed)"
-	@echo "  make stage                  - Stage current module to STAGEDIR (unavailable if EXECUTABLE=true)"
-	@echo "  make install                - Install current module (requires sudo; unavailable if EXECUTABLE=true)"
-	@echo "  make clean-<Module|All>     - Clean specific module or all"
-	@echo "  make config-<Module|All>    - Configure specific module or all"
-	@echo "  make build-<Module|All>     - Build specific module or all"
-	@echo "  make stage-<Module|All>     - Stage specific module or all"
-	@echo "  make install-<Module|All>   - Install specific module or all"
-	@echo "  make push [MSG=\"msg\"]       - Commit and push current module"
-	@echo "  make push-<Module|All>      - Commit and push specific module or all"
-	@echo "  make pull                   - Pull current module"
-	@echo "  make pull-<Module|All>      - Pull specific module or all"
-	@echo "  make update                 - Force update Makefile from repository"
-	@echo "  make quiet                  - Suppress daily update check messages"
-	@echo "  make noisy                  - Re-enable daily update check messages"
-	@echo "  show-binary-dir             - Display the binary dir for this preset"
-	@echo ""
-	@echo "  (alias: 'make silent' behaves the same as 'make quiet')"
-	@echo ""
-	@echo "Default target behavior:"
-	@echo "  - In module directories: if EXECUTABLE=true -> build; else -> stage"
-	@echo "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES"
+	@printf "Mode: $(MODE)\n"
+	@printf "Modules: $(MODULES)\n"
+	@printf "Stage Dir: $(STAGEDIR)\n"
+	@printf "Preset: $(BOLD)$(PRESET)$(NC)\n"
+	@printf "Executable: $(EXECUTABLE)\n"
+	@printf "\n"
+	@printf "Available targets:\n"
+	@printf "  make clean                  - Clean current module\n"
+	@printf "  make config                 - Configure current module\n"
+	@printf "  make build                  - Build current module (auto-configures if needed)\n"
+	@printf "  make stage                  - Stage current module to STAGEDIR (unavailable if EXECUTABLE=true)\n"
+	@printf "  make install                - Install current module (requires sudo; unavailable if EXECUTABLE=true)\n"
+	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
+	@printf "  make config-<Module|All>    - Configure specific module or all\n"
+	@printf "  make build-<Module|All>     - Build specific module or all\n"
+	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
+	@printf "  make install-<Module|All>   - Install specific module or all\n"
+	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
+	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
+	@printf "  make pull                   - Pull current module\n"
+	@printf "  make pull-<Module|All>      - Pull specific module or all\n"
+	@printf "  make update                 - Force update Makefile from repository\n"
+	@printf "  make quiet                  - Suppress daily update check messages\n"
+	@printf "  make noisy                  - Re-enable daily update check messages\n"
+	@printf "  show-binary-dir             - Display the binary dir for this preset\n"
+	@printf "\n"
+	@printf "  (alias: 'make silent' behaves the same as 'make quiet')\n"
+	@printf "\n"
+	@printf "Default target behavior:\n"
+	@printf "  - In module directories: if EXECUTABLE=true -> build; else -> stage\n"
+	@printf "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES\n"
 
 # Default target
 default:
@@ -411,15 +416,15 @@ ifeq ($(MODE),monorepo)
 	@for mod in $(MODULES); do \
 		printf "$(GREEN)Cleaning module: $$mod$(NC)\n"; \
 		if [ -d "$$mod" ]; then \
-			rm -rf "$$mod/build" "$$mod/out"; \
+			rm -rf "$$mod/build" "$$mod/out" "$$mod/external"; \
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi \
-	done;
-	@printf "$(GREEN)Cleaning monorepo$(NC)\n";
-	@rm -rf build out external;
-	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n";
-	@rm -rf $(STAGEDIR);
+	done
+	@printf "$(GREEN)Cleaning monorepo$(NC)\n"
+	@rm -rf build out external
+	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n"
+	@rm -rf $(STAGEDIR)
 else
 	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
 	@rm -rf build out external
@@ -440,12 +445,12 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)Configuring current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(GREEN)$(PRESET)$(NC)\n"
 	@$(call run_config) || (printf "$(RED)Configure failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define config_module
-	@printf "$(GREEN)Configuring module: $(1) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Configuring module: $(1) with preset $(BOLD)$(PRESET)$(NC)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" || \
 		(printf "$(RED)Configure failed for $(1)$(NC)\n" && exit 1); \
@@ -458,7 +463,7 @@ config-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(GREEN)Configuring all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) config || exit 1; \
@@ -468,7 +473,7 @@ ifeq ($*,All)
 		fi; \
 	done
 else
-	@printf "$(YELLOW)Delegating to module $* for config...$(NC)\n"
+	@printf "$(YELLOW)Delegating$(NC) to module $(BOLD)$*$(NC) for config...$(NC)\n"
 	@if [ -d "$*" ]; then \
 		cd $* && $(MAKE) config; \
 	else \
@@ -478,7 +483,7 @@ else
 endif
 else
 ifeq ($*,All)
-	@printf "$(GREEN)Configuring all modules in dependency order$(NC)\n"
+	@printf "$(GREEN)Configuring$(NC) all modules in dependency order$(NC)\n"
 	@for mod in $(MODULES); do \
 		$(MAKE) config_module_impl MODULE=$$mod || exit 1; \
 	done
@@ -496,7 +501,7 @@ config_module_impl:
 #
 build:
 ifeq ($(MODE),monorepo)
-	@printf "$(GREEN)Building all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) build || exit 1; \
@@ -506,13 +511,13 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)Building current module: $(CURRENT_DIR) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@mkdir -p $(BINARY_DIR)
-	@$(call run_build,) || (printf "$(RED)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+	@$(call run_build,) || (printf "$(RED)$(BOLD)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define build_module
-	@printf "$(GREEN)Building module: $(1) with preset $(PRESET)$(NC)\n"
+	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
