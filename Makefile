@@ -285,11 +285,7 @@ endef
 # If destdir is provided, it will be set as DESTDIR environment variable
 # Auto-configures if build directory doesn't exist
 define run_build
-	$(call ensure_presets)
-	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
-		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
-	fi
+	$(call run_config)
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
 
@@ -514,7 +510,7 @@ ifeq ($(MODE),monorepo)
 else
 	@printf "$(GREEN)Building$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@mkdir -p $(BINARY_DIR)
-	@$(call run_build,) || (printf "$(RED)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+	@$(call run_build,) || (printf "$(RED)$(BOLD)Build failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define build_module
