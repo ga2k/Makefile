@@ -285,9 +285,9 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call ensure_presets)
-	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
+	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-		cmake --preset "$(PRESET)" || exit 1; \
+		cmake -S . -B $(c) --preset "$(PRESET)" || exit 1; \
 	fi
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
