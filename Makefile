@@ -286,7 +286,10 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
+	$(if $(2),DESTDIR=$(2)) cmake --build $(BINARY_DIR) --preset "$(PRESET)" $(1)
+
+
+	cmake --build --preset "$(PRESET)"
 endef
 
 help:
