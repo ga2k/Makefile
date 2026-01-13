@@ -259,16 +259,6 @@ define ensure_presets
 endef
 
 # Helper: configure with preset when CMakePresets.json exists
-#define run_config
-#	$(call ensure_presets)
-#	@if [ -f CMakePresets.json ]; then \
-#		printf "$(GREEN)Configuring with preset $(PRESET)$(NC)\n"; \
-#		cmake --preset "$(PRESET)"; \
-#	else \
-#		printf "$(GREEN)Configuring in $(BUILD_DIR)$(NC)\n"; \
-#		cmake -S . -B $(BUILD_DIR); \
-#	fi
-#endef
 define run_config
 	$(call ensure_presets)
 	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
