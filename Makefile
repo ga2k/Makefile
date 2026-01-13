@@ -273,7 +273,7 @@ define run_config
 	printf "$(GREEN)Configuring with preset $(PRESET)$(NC) "
 	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(c) --preset "$(PRESET)"; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)"; \
 	else \
 		printf "$(GREEN)not required, skipping...$(NC)\n"; \
 	fi
@@ -287,7 +287,7 @@ define run_build
 	$(call ensure_presets)
 	if [ ! -f "$(BUILD_DIR)/CMakeCache.txt" ]; then \
 		printf "$(YELLOW)bUiLd cache not found, configuring first...$(NC)\n"; \
-		cmake -S . -B $(c) --preset "$(PRESET)" || exit 1; \
+		cmake -S . -B $(BUILD_DIR) --preset "$(PRESET)" || exit 1; \
 	fi
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
