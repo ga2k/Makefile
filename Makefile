@@ -416,15 +416,15 @@ ifeq ($(MODE),monorepo)
 	@for mod in $(MODULES); do \
 		printf "$(GREEN)Cleaning module: $$mod$(NC)\n"; \
 		if [ -d "$$mod" ]; then \
-			rm -rf "$$mod/build" "$$mod/out"; \
+			rm -rf "$$mod/build" "$$mod/out" "$$mod/external"; \
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi \
-	done;
-	@printf "$(GREEN)Cleaning monorepo$(NC)\n";
-	@rm -rf build out external;
-	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n";
-	@rm -rf $(STAGEDIR);
+	done
+	@printf "$(GREEN)Cleaning monorepo$(NC)\n"
+	@rm -rf build out external
+	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n"
+	@rm -rf $(STAGEDIR)
 else
 	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
 	@rm -rf build out external
