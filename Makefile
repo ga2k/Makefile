@@ -258,16 +258,15 @@ define ensure_presets
 	fi
 endef
 
-# Helper: configure with preset when CMakePresets.json exists
 define run_config
 	$(call ensure_presets)
-	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
-	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
-		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
-	else \
-		printf "$(GREEN)not required$(NC), skipping...\n"; \
-	fi
+#	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
+#	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
+#		printf "$(YELLOW)required, configuring...$(NC)\n"; \
+#		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
+#	else \
+#		printf "$(GREEN)not required$(NC), skipping...\n"; \
+#	fi
 endef
 
 # Helper: build with preset when CMakePresets.json exists; otherwise configure and build in $(BUILD_DIR)
