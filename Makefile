@@ -1,4 +1,4 @@
-VERSION := 2.0.3
+VERSION := 2.0.4
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -292,8 +292,8 @@ help:
 	@printf "  make clean                  - Clean current module\n"
 	@printf "  make config                 - Configure current module\n"
 	@printf "  make build                  - Build current module (auto-configures if needed)\n"
-	@printf "  make stage                  - Stage current module to STAGEDIR (unavailable if EXECUTABLE=true)\n"
-	@printf "  make install                - Install current module (requires sudo; unavailable if EXECUTABLE=true)\n"
+	@printf "  make stage                  - Stage current module to STAGEDIR\n"
+	@printf "  make install                - Install current module (requires sudo)\n"
 	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
 	@printf "  make config-<Module|All>    - Configure specific module or all\n"
 	@printf "  make build-<Module|All>     - Build specific module or all\n"
@@ -559,25 +559,17 @@ ifeq ($(MODE),monorepo)
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi; \
-	done
-else
-ifeq ($(strip $(EXECUTABLE)),true)
-	@printf "$(RED)ERROR: 'stage' is unavailable when EXECUTABLE=true$(NC)\n"; exit 1
+	done; \
 else
 	@printf "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
 	@mkdir -p $(STAGEDIR)
 	@$(call run_build,--target install,$(STAGEDIR)) || \
 		(printf "$(RED)Stage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
-endif
 
 define stage_module
 	@printf "$(GREEN)Staging module: $(1) to $(STAGEDIR)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		if [ -f "$(MODULE_PREFIX)/$(1)/.modules" ] && \
-		   grep -Eq '^[[:space:]]*EXECUTABLE[[:space:]]*:=[[:space:]]*true' "$(MODULE_PREFIX)/$(1)/.modules"; then \
-			printf "$(RED)ERROR: 'stage' is unavailable for EXECUTABLE=true module: $(1)$(NC)\n"; exit 1; \
-		fi; \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
 		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install || \
@@ -639,22 +631,14 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-ifeq ($(strip $(EXECUTABLE)),true)
-	@printf "$(RED)ERROR: 'install' is unavailable when EXECUTABLE=true$(NC)\n"; exit 1
-else
 	@printf "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)\n"
 	@sudo cmake --build --preset "$(PRESET)" --target install || \
 		(printf "$(RED)Install failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
-endif
 endif
 
 define install_module
 	@printf "$(GREEN)Installing module: $(1) (requires sudo)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		if [ -f "$(MODULE_PREFIX)/$(1)/.modules" ] && \
-		   grep -Eq '^[[:space:]]*EXECUTABLE[[:space:]]*:=[[:space:]]*true' "$(MODULE_PREFIX)/$(1)/.modules"; then \
-			printf "$(RED)ERROR: 'install' is unavailable for EXECUTABLE=true module: $(1)$(NC)\n"; exit 1; \
-		fi; \
 		cd $(MODULE_PREFIX)/$(1) && \
 		sudo cmake --build --preset "$(PRESET)" --target install || \
 		(printf "$(RED)Install failed for $(1)$(NC)\n" && exit 1); \
