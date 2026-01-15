@@ -1,4 +1,4 @@
-VERSION := 2.0.2
+VERSION := 2.0.3
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -44,7 +44,7 @@ export PRESET
 export FORCE
 
 # Ensure auto-update runs before the user's goals (skip for update/silent/noisy/version/check-update/update-check)
-AUTOUPDATE_SKIP_GOALS := update quiet silent noisy version check-update update-check
+AUTOUPDATE_SKIP_GOALS := update quiet silent noisy version check-update update-check __autoupdate
 ifneq ($(strip $(MAKECMDGOALS)),)
   ifeq (,$(filter $(AUTOUPDATE_SKIP_GOALS),$(MAKECMDGOALS)))
     $(foreach g,$(MAKECMDGOALS),$(eval $(g): __autoupdate))
