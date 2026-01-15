@@ -74,7 +74,7 @@ __autoupdate:
 		rm -rf "$$TMP_DIR"; \
 		exit 0; \
 	fi; \
-	NEW_VERSION=$$($(MAKE) --no-print-directory -C "$$TMP_DIR" version 2>/dev/null); \
+	NEW_VERSION=$$(grep "^VERSION\s*:=\s*" "$$TMP_DIR/Makefile" | head -n 1 | sed 's/.*:=\s*//'); \
 	if [ -z "$$NEW_VERSION" ]; then \
 		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)Failed to obtain version from cloned repo.$(NC)\n"; fi; \
 		rm -rf "$$TMP_DIR"; \
@@ -111,8 +111,10 @@ __autoupdate:
 	rm -rf "$$TMP_DIR"
 
 # Check for .modules file
+ifneq ($(MAKECMDGOALS),version)
 ifeq (,$(wildcard ./.modules))
 $(error $(RED)ERROR: .modules file not found in current directory$(NC))
+endif
 endif
 
 # Parse .modules file
@@ -370,14 +372,14 @@ check-update:
 		rm -rf "$$TMP_DIR"; \
 		exit 1; \
 	fi; \
-	ONLINE_VERSION=$$($(MAKE) --no-print-directory -C "$$TMP_DIR" version 2>/dev/null); \
+	ONLINE_VERSION=$$(grep "^VERSION\s*:=\s*" "$$TMP_DIR/Makefile" | head -n 1 | sed 's/.*:=\s*//'); \
 	rm -rf "$$TMP_DIR"; \
 	if [ -z "$$ONLINE_VERSION" ]; then \
 		printf "$(RED)Failed to obtain version from cloned repo.$(NC)\n"; \
 		exit 1; \
 	fi; \
-	printf "\nUpdate Check Results\n"; \
-	printf "--------------------\n"; \
+	printf "Update Check Results\n"; \
+	echo "--------------------"; \
 	printf "Current Version : $(VERSION)\n"; \
 	printf "On-line Version : $$ONLINE_VERSION\n"; \
 	printf "   Last checked : $(LAST_CHECK_TIME)\n\n"
