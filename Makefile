@@ -1,4 +1,4 @@
-VERSION := 2.0.4
+VERSION := 2.0.7
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -259,7 +259,7 @@ endef
 define run_config
 	$(call ensure_presets)
 	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
-	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ]; then \
+	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ] || [ ! -f "$(BINARY_DIR)/build.ninja" ] && [ ! -f "$(BINARY_DIR)/Makefile" ]; then \
 		printf "$(YELLOW)required, configuring...$(NC)\n"; \
 		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
 	else \
@@ -273,10 +273,7 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build $(BINARY_DIR) --preset "$(PRESET)" $(1)
-
-
-	cmake --build --preset "$(PRESET)"
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
 
 help:
@@ -559,7 +556,7 @@ ifeq ($(MODE),monorepo)
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi; \
-	done; \
+	done
 else
 	@printf "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
 	@mkdir -p $(STAGEDIR)
