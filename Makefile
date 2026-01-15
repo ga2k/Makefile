@@ -1,4 +1,4 @@
-VERSION := 2.0.0
+VERSION := 2.0.2
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -11,9 +11,9 @@ ifeq ($(OS),Windows_NT)
     export PATH := $(GIT_BIN):$(PATH)
 endif
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update update-check
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
-.SILENT: __autoupdate check-update
+.SILENT: __autoupdate check-update update-check
 # Default target will be overridden later to implement requested behavior
 .DEFAULT_GOAL := default
 
@@ -43,8 +43,8 @@ export MSG
 export PRESET
 export FORCE
 
-# Ensure auto-update runs before the user's goals (skip for update/silent/noisy)
-AUTOUPDATE_SKIP_GOALS := update quiet silent noisy
+# Ensure auto-update runs before the user's goals (skip for update/silent/noisy/version/check-update/update-check)
+AUTOUPDATE_SKIP_GOALS := update quiet silent noisy version check-update update-check
 ifneq ($(strip $(MAKECMDGOALS)),)
   ifeq (,$(filter $(AUTOUPDATE_SKIP_GOALS),$(MAKECMDGOALS)))
     $(foreach g,$(MAKECMDGOALS),$(eval $(g): __autoupdate))
@@ -103,7 +103,11 @@ __autoupdate:
 		printf "Would you like to push your version to git? [y/N] "; \
 		read ans; \
 		if [ "$$ans" = "y" ] || [ "$$ans" = "Y" ]; then \
-			$(MAKE) push; \
+			cp Makefile "$$TMP_DIR/Makefile"; \
+			(cd "$$TMP_DIR" && \
+			 git add . && \
+			 git commit -m "push updated version ($(VERSION)) to repo" && \
+			 git push); \
 		fi; \
 	else \
 		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(GREEN)Your Makefile is up to date.$(NC)\n"; fi; \
@@ -284,6 +288,7 @@ help:
 	@printf "Executable: $(EXECUTABLE)\n"
 	@printf "\n"
 	@printf "Available targets:\n"
+	@printf "  make version                - Print the version of the build system\n"
 	@printf "  make clean                  - Clean current module\n"
 	@printf "  make config                 - Configure current module\n"
 	@printf "  make build                  - Build current module (auto-configures if needed)\n"
@@ -383,6 +388,8 @@ check-update:
 	printf "Current Version : $(VERSION)\n"; \
 	printf "On-line Version : $$ONLINE_VERSION\n"; \
 	printf "   Last checked : $(LAST_CHECK_TIME)\n\n"
+
+update-check: check-update
 
 #
 # CLEAN targets
