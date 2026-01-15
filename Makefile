@@ -1,3 +1,4 @@
+VERSION := 2.0.0
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -10,11 +11,14 @@ ifeq ($(OS),Windows_NT)
     export PATH := $(GIT_BIN):$(PATH)
 endif
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
-.SILENT: __autoupdate
+.SILENT: __autoupdate check-update
 # Default target will be overridden later to implement requested behavior
 .DEFAULT_GOAL := default
+
+version:
+	@echo $(VERSION)
 
 # Auto-update implementation
 # This runs once at the start of any requested target (except update/quiet/silent/noisy),
@@ -24,9 +28,8 @@ endif
 
 # Variables used by update/quiet(silent) targets
 MAKEFILE_UPDATE_MARKER := .makefile_update_check
-MAKEFILE_SILENT_MARKER := .makefile_silent
-MAKEFILE_REPO_URL := https://raw.githubusercontent.com/ga2k/Makefile/master/Makefile
 TODAY := $(shell date +%Y-%m-%d)
+LAST_CHECK_TIME := $(shell [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && cat $(MAKEFILE_UPDATE_MARKER) | cut -d' ' -f2- 2>/dev/null || echo "Never")
 
 # Color output (use -e with echo for these to work)
 BOLD := \033[1m
@@ -49,77 +52,63 @@ ifneq ($(strip $(MAKECMDGOALS)),)
 endif
 
 __autoupdate:
-	@IS_SILENT=0; [ -f "$(MAKEFILE_SILENT_MARKER)" ] && IS_SILENT=1; \
-	TODAY="$(TODAY)"; \
-	LAST=""; [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && LAST=$$(cat $(MAKEFILE_UPDATE_MARKER) 2>/dev/null); \
-	if [ "$$LAST" = "$$TODAY" ]; then \
-		if [ "$$IS_SILENT" -ne 1 ]; then \
-			printf "Checking for update: $(GREEN)already done today.$(NC)\n\n"; \
-			echo ""; \
-			printf "Run '$(YELLOW)make update$(NC)' to update anyway.\n\n"; \
-			printf "Run '$(YELLOW)make quiet$(NC)'  to stop these messages.\n"; \
-			printf "Run '$(YELLOW)make noisy$(NC)'  to start showing them again.\n"; \
-			echo; \
+	@IS_SILENT=0; [ "$(QUIET)" = "true" ] && IS_SILENT=1; \
+	CUR_TIME=$$(date +%s); \
+	LAST_CHECK=0; [ -f "$(MAKEFILE_UPDATE_MARKER)" ] && LAST_CHECK=$$(cat $(MAKEFILE_UPDATE_MARKER) | cut -d' ' -f1 2>/dev/null || echo 0); \
+	DIFF=$$((CUR_TIME - LAST_CHECK)); \
+	if [ "$$IS_SILENT" -ne 1 ]; then \
+		printf "$(BOLD)MCA Build System v$(VERSION)$(NC)\n"; \
+		printf "Last update check: $(YELLOW)$(LAST_CHECK_TIME)$(NC)\n\n"; \
+	fi; \
+	if [ "$$DIFF" -lt 600 ] && [ "$(FORCE)" != "TRUE" ]; then \
+		exit 0; \
+	fi; \
+	if [ -z "$(REPO)" ]; then \
+		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)REPO not defined in .modules, skipping update check.$(NC)\n"; fi; \
+		exit 0; \
+	fi; \
+	TMP_DIR=$$(mktemp -d /tmp/makefile.repo.XXXXXX); \
+	if [ "$$IS_SILENT" -ne 1 ]; then printf "Checking for updates from $(REPO)...\n"; fi; \
+	if ! git clone --depth 1 "$(REPO)" "$$TMP_DIR" >/dev/null 2>&1; then \
+		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)Failed to clone repo for update check.$(NC)\n"; fi; \
+		rm -rf "$$TMP_DIR"; \
+		exit 0; \
+	fi; \
+	NEW_VERSION=$$($(MAKE) --no-print-directory -C "$$TMP_DIR" version 2>/dev/null); \
+	if [ -z "$$NEW_VERSION" ]; then \
+		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)Failed to obtain version from cloned repo.$(NC)\n"; fi; \
+		rm -rf "$$TMP_DIR"; \
+		exit 0; \
+	fi; \
+	echo "$$CUR_TIME $$(date '+%Y-%m-%d %H:%M:%S')" > $(MAKEFILE_UPDATE_MARKER); \
+	V1_MAJOR=$$(echo "$(VERSION)" | cut -d. -f1); V1_MINOR=$$(echo "$(VERSION)" | cut -d. -f2); V1_PATCH=$$(echo "$(VERSION)" | cut -d. -f3); \
+	V2_MAJOR=$$(echo "$$NEW_VERSION" | cut -d. -f1); V2_MINOR=$$(echo "$$NEW_VERSION" | cut -d. -f2); V2_PATCH=$$(echo "$$NEW_VERSION" | cut -d. -f3); \
+	NEWER=0; \
+	if [ "$$V2_MAJOR" -gt "$$V1_MAJOR" ]; then NEWER=1; \
+	elif [ "$$V2_MAJOR" -eq "$$V1_MAJOR" ] && [ "$$V2_MINOR" -gt "$$V1_MINOR" ]; then NEWER=1; \
+	elif [ "$$V2_MAJOR" -eq "$$V1_MAJOR" ] && [ "$$V2_MINOR" -eq "$$V1_MINOR" ] && [ "$$V2_PATCH" -gt "$$V1_PATCH" ]; then NEWER=1; fi; \
+	if [ "$$NEWER" -eq 1 ]; then \
+		printf "$(GREEN)A newer version ($$NEW_VERSION) is available.$(NC)\n"; \
+		cp "$$TMP_DIR/Makefile" Makefile; \
+		rm -rf "$$TMP_DIR"; \
+		printf "$(YELLOW)Makefile updated. Please re-run your command.$(NC)\n"; \
+		exit 1; \
+	fi; \
+	OLDER=0; \
+	if [ "$$V2_MAJOR" -lt "$$V1_MAJOR" ]; then OLDER=1; \
+	elif [ "$$V2_MAJOR" -eq "$$V1_MAJOR" ] && [ "$$V2_MINOR" -lt "$$V1_MINOR" ]; then OLDER=1; \
+	elif [ "$$V2_MAJOR" -eq "$$V1_MAJOR" ] && [ "$$V2_MINOR" -eq "$$V1_MINOR" ] && [ "$$V2_PATCH" -lt "$$V1_PATCH" ]; then OLDER=1; fi; \
+	if [ "$$OLDER" -eq 1 ]; then \
+		printf "$(YELLOW)Your local version ($(VERSION)) is newer than the repo version ($$NEW_VERSION).$(NC)\n"; \
+		printf "Would you like to push your version to git? [y/N] "; \
+		read ans; \
+		if [ "$$ans" = "y" ] || [ "$$ans" = "Y" ]; then \
+			$(MAKE) push; \
 		fi; \
-		exit 0; \
-	fi; \
-	\
-	if ! command -v curl >/dev/null 2>&1; then \
-		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		printf "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow.\n"; \
-		exit 0; \
-	fi; \
-	TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
-	TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
-	if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
-		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		rm -f $$TMP_BODY $$TMP_HEAD; \
-		printf "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow.\n"; \
-		exit 0; \
-	fi; \
-	if cmp -s $$TMP_BODY Makefile; then \
-		rm -f $$TMP_BODY $$TMP_HEAD; \
-		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		printf "Checking for update: $(GREEN)your file is up-to-date.$(NC) Checking again tomorrow.\n"; \
-		exit 0; \
-	fi; \
-	\
-	IS_DIRTY=1; \
-	if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1; then \
-		if git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
-			if git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile; then IS_DIRTY=0; fi; \
-		fi; \
 	else \
-		IS_DIRTY=1; \
+		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(GREEN)Your Makefile is up to date.$(NC)\n"; fi; \
 	fi; \
-	LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
-	REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
-	if [ -n "$$REM_LM" ]; then \
-		REM_EPOCH=$$(date -u -d "$$REM_LM" +%s 2>/dev/null || date -u -j -f '%a, %d %b %Y %H:%M:%S %Z' "$$REM_LM" +%s 2>/dev/null || echo 0); \
-	else \
-		REM_EPOCH=0; \
-	fi; \
-	\
-	SHOULD_REPLACE=1; \
-	if [ "$$IS_DIRTY" -ne 0 ]; then SHOULD_REPLACE=0; fi; \
-	if [ "$$SHOULD_REPLACE" -eq 1 ]; then \
-		[ -z "$$UPDATE_DEBUG" ] || printf "$(YELLOW)[autoupdate debug] replacing (dirty=$$IS_DIRTY, trust_ts=$$UPDATE_TRUST_TIMESTAMP, remote=$$REM_EPOCH, local=$$LOCAL_EPOCH)$(NC)\n"; \
-		mv -f $$TMP_BODY Makefile; \
-		rm -f $$TMP_HEAD; \
-		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		printf "Checking for update: $(GREEN)a newer file found and downloaded.$(NC) Please re-run your command\n"; \
-		exit 2; \
-	else \
-		[ -z "$$UPDATE_DEBUG" ] || { \
-			LHS=$$(sha256sum Makefile 2>/dev/null | awk '{print $$1}'); \
-			RHS=$$(sha256sum $$TMP_BODY 2>/dev/null | awk '{print $$1}'); \
-			printf "$(YELLOW)[autoupdate debug] url=%s\nlocal_epoch=%s remote_epoch=%s\nlocal_sha256=%s\nremote_sha256=%s\n(reason: %s)$(NC)\n" "$(MAKEFILE_REPO_URL)" "$$LOCAL_EPOCH" "$$REM_EPOCH" "$$LHS" "$$RHS" "$$( [ "$$IS_DIRTY" -ne 0 ] && echo dirty || ( [ "$$UPDATE_TRUST_TIMESTAMP" = "1" ] && [ "$$REM_EPOCH" -lt "$$LOCAL_EPOCH" ] && echo remote_older || echo other ))\n"; \
-		}; \
-		rm -f $$TMP_BODY $$TMP_HEAD; \
-		echo "$$TODAY" > $(MAKEFILE_UPDATE_MARKER); \
-		printf "Checking for update: $(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Set UPDATE_FORCE=1 to force.\n"; \
-		exit 0; \
-	fi
+	rm -rf "$$TMP_DIR"
 
 # Check for .modules file
 ifeq (,$(wildcard ./.modules))
@@ -132,11 +121,14 @@ MODULES := $(shell grep -E '^MODULES\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*
 STAGEDIR := $(shell grep -E '^STAGEDIR\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 PRESET_FILE := $(shell grep -E '^PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
 EXECUTABLE := $(shell grep -E '^EXECUTABLE\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
+QUIET_VAL := $(shell grep -E '^QUIET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
+REPO := $(shell grep -E '^REPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 
 # Set defaults
 STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
 PRESET := $(if $(PRESET),$(PRESET),$(if $(PRESET_FILE),$(PRESET_FILE),default))
 EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
+QUIET := $(if $(filter true,$(QUIET_VAL)),true,false)
 
 # Extract both binaryDir and the environment variables from the preset
 # This gets complex because we need to follow inheritance chains
@@ -305,6 +297,7 @@ help:
 	@printf "  make pull                   - Pull current module\n"
 	@printf "  make pull-<Module|All>      - Pull specific module or all\n"
 	@printf "  make update                 - Force update Makefile from repository\n"
+	@printf "  make check-update           - Check for Makefile updates without updating\n"
 	@printf "  make quiet                  - Suppress daily update check messages\n"
 	@printf "  make noisy                  - Re-enable daily update check messages\n"
 	@printf "  show-binary-dir             - Display the binary dir for this preset\n"
@@ -343,59 +336,51 @@ endif
 # QUIET/NOISY targets
 #
 quiet:
-	@touch $(MAKEFILE_SILENT_MARKER)
+	@if grep -q "^QUIET\s*:=\s*" .modules; then \
+		sed -i 's/^QUIET\s*:=\s*.*/QUIET := true/' .modules; \
+	else \
+		echo "QUIET := true" >> .modules; \
+	fi
 	@printf "$(GREEN)Daily update check messages suppressed. Run 'make noisy' to re-enable.$(NC)\n"
 
 silent: quiet
 
 noisy:
-	@rm -f $(MAKEFILE_SILENT_MARKER)
+	@if grep -q "^QUIET\s*:=\s*" .modules; then \
+		sed -i 's/^QUIET\s*:=\s*.*/QUIET := false/' .modules; \
+	else \
+		echo "QUIET := false" >> .modules; \
+	fi
 	@printf "$(GREEN)Daily update check messages re-enabled.$(NC)\n"
 
 #
 # UPDATE target
 #
 update:
-	@printf "Checking for update: \n"
-	@if command -v curl >/dev/null 2>&1; then \
-		FORCE_UPDATE=0; \
-		if [ "$(FORCE)" = "TRUE" ] || [ "$$UPDATE_FORCE" = "1" ]; then FORCE_UPDATE=1; fi; \
-		TMP_BODY=$$(mktemp /tmp/makefile.remote.XXXXXX); \
-		TMP_HEAD=$$(mktemp /tmp/makefile.headers.XXXXXX); \
-		if ! curl -fsSL -D $$TMP_HEAD -o $$TMP_BODY "$(MAKEFILE_REPO_URL)" >/dev/null 2>&1; then \
-			rm -f $$TMP_BODY $$TMP_HEAD; \
-			printf "$(RED)ERROR: failed to download remote Makefile.$(NC)\n"; \
-			exit 1; \
-		fi; \
-		if cmp -s $$TMP_BODY Makefile; then \
-			rm -f $$TMP_BODY $$TMP_HEAD; \
-			printf "$(GREEN)you have the newest version.$(NC)\n"; \
-			exit 0; \
-		fi; \
-		LOCAL_EPOCH=$$(stat -c %Y Makefile 2>/dev/null || stat -f %m Makefile 2>/dev/null || echo 0); \
-		REM_LM=$$(grep -i '^Last-Modified:' $$TMP_HEAD | sed 's/^[^:]*:\s*//'); \
-		if [ -n "$$REM_LM" ]; then \
-			REM_EPOCH=$$(date -u -d "$$REM_LM" +%s 2>/dev/null || date -u -j -f '%a, %d %b %Y %H:%M:%S %Z' "$$REM_LM" +%s 2>/dev/null || echo 0); \
-		else \
-			REM_EPOCH=0; \
-		fi; \
-		IS_DIRTY=0; \
-		if command -v git >/dev/null 2>&1 && git rev-parse --is-inside-work-tree >/dev/null 2>&1 && git ls-files --error-unmatch Makefile >/dev/null 2>&1; then \
-			if ! (git diff --quiet -- Makefile && git diff --quiet --cached -- Makefile); then IS_DIRTY=1; fi; \
-		fi; \
-		if [ "$$IS_DIRTY" -eq 1 ] && [ "$$FORCE_UPDATE" -ne 1 ]; then \
-			rm -f $$TMP_BODY $$TMP_HEAD; \
-			printf "$(RED)your local Makefile has uncommitted changes; not replacing.$(NC) Use FORCE=TRUE or UPDATE_FORCE=1 to force.$(NC)\n"; \
-			exit 0; \
-		fi; \
-		mv -f $$TMP_BODY Makefile; \
-		rm -f $$TMP_HEAD; \
-		echo "$(TODAY)" > $(MAKEFILE_UPDATE_MARKER); \
-		printf "$(GREEN)your version was updated. Please re-run your make command.$(NC)\n"; \
-	else \
-		printf "$(RED)ERROR: curl not found. Cannot update Makefile.$(NC)\n"; \
+	@$(MAKE) __autoupdate FORCE=TRUE
+
+check-update:
+	@if [ -z "$(REPO)" ]; then \
+		printf "$(RED)REPO not defined in .modules$(NC)\n"; \
 		exit 1; \
-	fi
+	fi; \
+	TMP_DIR=$$(mktemp -d /tmp/makefile.repo.XXXXXX); \
+	if ! git clone --depth 1 "$(REPO)" "$$TMP_DIR" >/dev/null 2>&1; then \
+		printf "$(RED)Failed to clone repo for update check.$(NC)\n"; \
+		rm -rf "$$TMP_DIR"; \
+		exit 1; \
+	fi; \
+	ONLINE_VERSION=$$($(MAKE) --no-print-directory -C "$$TMP_DIR" version 2>/dev/null); \
+	rm -rf "$$TMP_DIR"; \
+	if [ -z "$$ONLINE_VERSION" ]; then \
+		printf "$(RED)Failed to obtain version from cloned repo.$(NC)\n"; \
+		exit 1; \
+	fi; \
+	printf "\nUpdate Check Results\n"; \
+	printf "--------------------\n"; \
+	printf "Current Version : $(VERSION)\n"; \
+	printf "On-line Version : $$ONLINE_VERSION\n"; \
+	printf "   Last checked : $(LAST_CHECK_TIME)\n\n"
 
 #
 # CLEAN targets
