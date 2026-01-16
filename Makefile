@@ -1,4 +1,4 @@
-VERSION := 2.0.7
+VERSION := 2.0.8
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -189,8 +189,8 @@ BINARY_DIR := $(get_preset_info)
 
 .PHONY: show-binary-dir
 show-binary-dir:
-	@echo "Preset: $(BOLD)$(PRESET)$(NC)"
-	@echo "Binary Dir: $(BINARY_DIR)"
+	@printf "Preset: $(BOLD)$(PRESET)$(NC)\n"
+	@printf "Binary Dir: $(BINARY_DIR)\n"
 
 # Expand tilde in STAGEDIR
 STAGEDIR := $(shell echo $(STAGEDIR))
