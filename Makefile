@@ -1,4 +1,4 @@
-VERSION := 2.0.8
+VERSION := 2.0.9
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -261,7 +261,7 @@ define run_config
 	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
 	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ] || [ ! -f "$(BINARY_DIR)/build.ninja" ] && [ ! -f "$(BINARY_DIR)/Makefile" ]; then \
 		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" || exit 1; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" -DCOLOUR=ON || exit 1; \
 	else \
 		printf "$(GREEN)not required$(NC), skipping...\n"; \
 	fi
@@ -273,7 +273,7 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1) -DCOLOUR=ON
 endef
 
 help:
@@ -432,7 +432,7 @@ endif
 define config_module
 	@printf "$(GREEN)Configuring module: $(1) with preset $(BOLD)$(PRESET)$(NC)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" -DCOLOUR=ON || \
 		(printf "$(RED)Configure failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -499,7 +499,7 @@ endif
 define build_module
 	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" -DCOLOUR=ON || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -569,7 +569,7 @@ define stage_module
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install || \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
 		(printf "$(RED)Stage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -629,7 +629,7 @@ ifeq ($(MODE),monorepo)
 	done
 else
 	@printf "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)\n"
-	@sudo cmake --build --preset "$(PRESET)" --target install || \
+	@sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
 		(printf "$(RED)Install failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
@@ -637,7 +637,7 @@ define install_module
 	@printf "$(GREEN)Installing module: $(1) (requires sudo)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && \
-		sudo cmake --build --preset "$(PRESET)" --target install || \
+		sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
 		(printf "$(RED)Install failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
