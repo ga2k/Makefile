@@ -1,4 +1,4 @@
-VERSION := 2.0.9
+VERSION := 2.0.10
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -11,7 +11,7 @@ ifeq ($(OS),Windows_NT)
     export PATH := $(GIT_BIN):$(PATH)
 endif
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update update-check
+.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update update-check config-Project build-Project stage-Project install-Project
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
 # Default target will be overridden later to implement requested behavior
@@ -296,6 +296,10 @@ help:
 	@printf "  make build-<Module|All>     - Build specific module or all\n"
 	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
 	@printf "  make install-<Module|All>   - Install specific module or all\n"
+	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from MCA root)\n"
+	@printf "  make build-Project          - Build monorepo CMakeLists directly (from MCA root)\n"
+	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from MCA root)\n"
+	@printf "  make install-Project        - Install monorepo CMakeLists directly (from MCA root)\n"
 	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
 	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make pull                   - Pull current module\n"
@@ -476,6 +480,14 @@ endif
 config_module_impl:
 	$(call config_module,$(MODULE))
 
+config-Project:
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)Configuring$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) with preset $(GREEN)$(PRESET)$(NC)\n"
+	@$(call run_config) || (printf "$(RED)Configure failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: config-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
+
 #
 # BUILD targets
 #
@@ -542,6 +554,15 @@ endif
 
 build_module_impl:
 	$(call build_module,$(MODULE))
+
+build-Project:
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)Building$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
+	@mkdir -p $(BINARY_DIR)
+	@$(call run_build,) || (printf "$(RED)$(BOLD)Build failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: build-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
 
 #
 # STAGE targets
@@ -613,6 +634,16 @@ endif
 stage_module_impl:
 	$(call stage_module,$(MODULE))
 
+stage-Project:
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)Staging$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) to $(STAGEDIR)\n"
+	@mkdir -p $(STAGEDIR)
+	@$(call run_build,--target install,$(STAGEDIR)) || \
+		(printf "$(RED)Stage failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: stage-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
+
 #
 # INSTALL targets
 #
@@ -680,6 +711,15 @@ endif
 
 install_module_impl:
 	$(call install_module,$(MODULE))
+
+install-Project:
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)Installing$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) (requires sudo)\n"
+	@sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
+		(printf "$(RED)Install failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: install-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
 
 #
 # GIT PUSH targets
