@@ -1,4 +1,4 @@
-VERSION := 2.0.10
+VERSION := 2.0.11
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -273,7 +273,7 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1) -DCOLOUR=ON
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
 endef
 
 help:
@@ -511,7 +511,7 @@ endif
 define build_module
 	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" -DCOLOUR=ON || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -590,7 +590,7 @@ define stage_module
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install || \
 		(printf "$(RED)Stage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -660,7 +660,7 @@ ifeq ($(MODE),monorepo)
 	done
 else
 	@printf "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)\n"
-	@sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
+	@sudo cmake --build --preset "$(PRESET)" --target install || \
 		(printf "$(RED)Install failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
@@ -668,7 +668,7 @@ define install_module
 	@printf "$(GREEN)Installing module: $(1) (requires sudo)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && \
-		sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
+		sudo cmake --build --preset "$(PRESET)" --target install || \
 		(printf "$(RED)Install failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
