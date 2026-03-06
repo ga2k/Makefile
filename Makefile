@@ -1,4 +1,4 @@
-VERSION := 2.0.11
+VERSION := 2.0.12
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -10,6 +10,9 @@ ifeq ($(OS),Windows_NT)
     GIT_BIN := /c/Program Files/Git/usr/bin
     export PATH := $(GIT_BIN):$(PATH)
 endif
+
+# Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
+NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
 .PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update update-check config-Project build-Project stage-Project install-Project
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
@@ -273,7 +276,7 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" $(1)
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" --parallel $(NPROC) $(1)
 endef
 
 help:
@@ -511,7 +514,7 @@ endif
 define build_module
 	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" --parallel $(NPROC) || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -590,7 +593,7 @@ define stage_module
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --target install || \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
 		(printf "$(RED)Stage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -660,7 +663,7 @@ ifeq ($(MODE),monorepo)
 	done
 else
 	@printf "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)\n"
-	@sudo cmake --build --preset "$(PRESET)" --target install || \
+	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
 		(printf "$(RED)Install failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
@@ -668,7 +671,7 @@ define install_module
 	@printf "$(GREEN)Installing module: $(1) (requires sudo)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && \
-		sudo cmake --build --preset "$(PRESET)" --target install || \
+		sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
 		(printf "$(RED)Install failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -715,7 +718,7 @@ install_module_impl:
 install-Project:
 ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Installing$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) (requires sudo)\n"
-	@sudo cmake --build --preset "$(PRESET)" --target install -DCOLOUR=ON || \
+	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install -DCOLOUR=ON || \
 		(printf "$(RED)Install failed for monorepo project$(NC)\n" && exit 1)
 else
 	$(error $(RED)ERROR: install-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
