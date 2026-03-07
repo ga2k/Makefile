@@ -1,4 +1,4 @@
-VERSION := 2.0.12
+VERSION := 3.0.1
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -14,7 +14,10 @@ endif
 # Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
-.PHONY: help clean config build stage install push pull update silent quiet noisy __autoupdate show-binary-dir default version check-update update-check config-Project build-Project stage-Project install-Project
+.PHONY: help clean config build stage install xbuild push pull update silent quiet noisy \
+        __autoupdate show-binary-dir default version check-update update-check \
+        config-Project build-Project stage-Project install-Project xbuild-Project \
+        xbuild_module_impl
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
 # Default target will be overridden later to implement requested behavior
@@ -41,9 +44,10 @@ GREEN := \033[0;32m
 YELLOW := \033[1;33m
 NC := \033[0m
 
-# Export MSG and PRESET for recursive make calls
+# Export MSG, PRESET, X_PRESET and FORCE for recursive make calls
 export MSG
 export PRESET
+export X_PRESET
 export FORCE
 
 # Ensure auto-update runs before the user's goals (skip for update/silent/noisy/version/check-update/update-check)
@@ -129,22 +133,23 @@ MONOREPO := $(shell grep -E '^MONOREPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\
 MODULES := $(shell grep -E '^MODULES\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^#]*\).*/\1/')
 STAGEDIR := $(shell grep -E '^STAGEDIR\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 PRESET_FILE := $(shell grep -E '^PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
+X_PRESET_FILE := $(shell grep -E '^X-PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
 EXECUTABLE := $(shell grep -E '^EXECUTABLE\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 QUIET_VAL := $(shell grep -E '^QUIET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 REPO := $(shell grep -E '^REPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
 
 # Set defaults
 STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
-PRESET := $(if $(PRESET),$(PRESET),$(if $(PRESET_FILE),$(PRESET_FILE),default))
+PRESET := $(if $(PRESET_FILE),$(PRESET_FILE),default)
+X_PRESET := $(if $(X_PRESET_FILE),$(X_PRESET_FILE),)
 EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
 QUIET := $(if $(filter true,$(QUIET_VAL)),true,false)
 
-# Extract both binaryDir and the environment variables from the preset
-# This gets complex because we need to follow inheritance chains
-define get_preset_info
-$(shell python3 -c '
-import json
-import sys
+# Shared Python helper for resolving preset binaryDir through inheritance chains.
+# Usage: $(call _resolve_binary_dir,PRESET_NAME)
+define _resolve_binary_dir
+$(strip $(shell python3 -c '
+import json, re, sys
 
 def get_preset_with_inheritance(presets, name, visited=None):
     if visited is None:
@@ -152,48 +157,50 @@ def get_preset_with_inheritance(presets, name, visited=None):
     if name in visited:
         return {}
     visited.add(name)
-
     preset = next((p for p in presets if p.get("name") == name), None)
     if not preset:
         return {}
-
-    # Start with inherited values
     result = {"environment": {}, "cacheVariables": {}}
     for parent_name in preset.get("inherits", []):
         parent = get_preset_with_inheritance(presets, parent_name, visited)
         result["environment"].update(parent.get("environment", {}))
         result["cacheVariables"].update(parent.get("cacheVariables", {}))
-
-    # Override with current preset values
     result["environment"].update(preset.get("environment", {}))
     result["cacheVariables"].update(preset.get("cacheVariables", {}))
     result["binaryDir"] = preset.get("binaryDir", "")
-
     return result
 
-with open("CMakePresets.json") as f:
-    data = json.load(f)
+try:
+    with open("CMakePresets.json") as f:
+        data = json.load(f)
+except Exception:
+    print("", end="")
+    sys.exit(0)
 
-preset = get_preset_with_inheritance(data["configurePresets"], "$(PRESET)")
+preset = get_preset_with_inheritance(data["configurePresets"], "$(1)")
 binary_dir = preset.get("binaryDir", "")
 
-# Resolve environment variables in binaryDir
-import re
 def resolve_env(match):
-    var_name = match.group(1)
-    return preset["environment"].get(var_name, "")
+    return preset["environment"].get(match.group(1), "")
 
 binary_dir = re.sub(r"\$$env\{([^}]+)\}", resolve_env, binary_dir)
 print(binary_dir, end="")
-')
+'))
 endef
 
-BINARY_DIR := $(get_preset_info)
+BINARY_DIR := $(call _resolve_binary_dir,$(PRESET))
+X_BINARY_DIR := $(if $(X_PRESET),$(call _resolve_binary_dir,$(X_PRESET)),)
 
 .PHONY: show-binary-dir
 show-binary-dir:
-	@printf "Preset: $(BOLD)$(PRESET)$(NC)\n"
-	@printf "Binary Dir: $(BINARY_DIR)\n"
+	@printf "Preset:         $(BOLD)$(PRESET)$(NC)\n"
+	@printf "Binary Dir:     $(BINARY_DIR)\n"
+	@if [ -n "$(X_PRESET)" ]; then \
+		printf "X-Preset:       $(BOLD)$(X_PRESET)$(NC)\n"; \
+		printf "X-Binary Dir:   $(X_BINARY_DIR)\n"; \
+	else \
+		printf "X-Preset:       $(YELLOW)not set$(NC)\n"; \
+	fi
 
 # Expand tilde in STAGEDIR
 STAGEDIR := $(shell echo $(STAGEDIR))
@@ -238,6 +245,11 @@ define check_module_exists
 	$(if $(filter $(1),All),,$(if $(wildcard $(MODULE_PREFIX)/$(1)),,$(error $(RED)ERROR: Module directory '$(MODULE_PREFIX)/$(1)' does not exist$(NC))))
 endef
 
+# Guard macro for cross-compile targets — fails clearly if X-PRESET not set
+define check_xpreset
+	$(if $(X_PRESET),,$(error $(RED)ERROR: X-PRESET not defined in .modules — cannot cross-compile$(NC)))
+endef
+
 # Build directory determination (from preset)
 BUILD_DIR := build
 
@@ -279,12 +291,32 @@ define run_build
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" --parallel $(NPROC) $(1)
 endef
 
+# Cross-compile config/build helpers — same logic as run_config/run_build but use X_PRESET
+define run_xconfig
+	$(call ensure_presets)
+	printf "$(GREEN)Configuring$(NC) (cross-compile) with preset $(BOLD)$(X_PRESET)$(NC) "
+	if [ ! -f "$(X_BINARY_DIR)/CMakeCache.txt" ] || [ ! -f "$(X_BINARY_DIR)/build.ninja" ]; then \
+		printf "$(YELLOW)required, configuring...$(NC)\n"; \
+		cmake -S . -B $(X_BINARY_DIR) --preset "$(X_PRESET)" -DCOLOUR=ON || exit 1; \
+	else \
+		printf "$(GREEN)not required$(NC), skipping...\n"; \
+	fi
+endef
+
+define run_xbuild
+	$(call run_xconfig)
+	cmake --build --preset "$(X_PRESET)" --parallel $(NPROC) $(1)
+endef
+
 help:
 	@printf "$(GREEN)Multi-Module CMake Build System$(NC)\n"
 	@printf "Mode: $(MODE)\n"
 	@printf "Modules: $(MODULES)\n"
 	@printf "Stage Dir: $(STAGEDIR)\n"
 	@printf "Preset: $(BOLD)$(PRESET)$(NC)\n"
+	@if [ -n "$(X_PRESET)" ]; then \
+		printf "X-Preset (cross-compile): $(BOLD)$(X_PRESET)$(NC)\n"; \
+	fi
 	@printf "Executable: $(EXECUTABLE)\n"
 	@printf "\n"
 	@printf "Available targets:\n"
@@ -294,15 +326,18 @@ help:
 	@printf "  make build                  - Build current module (auto-configures if needed)\n"
 	@printf "  make stage                  - Stage current module to STAGEDIR\n"
 	@printf "  make install                - Install current module (requires sudo)\n"
+	@printf "  make xbuild                 - Cross-compile current module (requires X-PRESET in .modules)\n"
 	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
 	@printf "  make config-<Module|All>    - Configure specific module or all\n"
 	@printf "  make build-<Module|All>     - Build specific module or all\n"
 	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
 	@printf "  make install-<Module|All>   - Install specific module or all\n"
-	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from MCA root)\n"
-	@printf "  make build-Project          - Build monorepo CMakeLists directly (from MCA root)\n"
-	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from MCA root)\n"
-	@printf "  make install-Project        - Install monorepo CMakeLists directly (from MCA root)\n"
+	@printf "  make xbuild-<Module|All>    - Cross-compile specific module or all\n"
+	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make build-Project          - Build monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make install-Project        - Install monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make xbuild-Project         - Cross-compile monorepo project (from $(MONOREPO) root)\n"
 	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
 	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make pull                   - Pull current module\n"
@@ -718,10 +753,91 @@ install_module_impl:
 install-Project:
 ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Installing$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) (requires sudo)\n"
-	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install -DCOLOUR=ON || \
+	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
 		(printf "$(RED)Install failed for monorepo project$(NC)\n" && exit 1)
 else
 	$(error $(RED)ERROR: install-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
+
+#
+# XBUILD targets (cross-compile — requires X-PRESET in .modules)
+# Note: cross-compile targets are build-only; stage/install are not supported
+# since the output binaries target a different OS.
+#
+xbuild:
+	$(call check_xpreset)
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)Cross-compiling$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) xbuild || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
+else
+	@printf "$(GREEN)Cross-compiling$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
+	@mkdir -p $(X_BINARY_DIR)
+	@$(call run_xbuild,) || (printf "$(RED)$(BOLD)Cross-compile failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+endif
+
+define xbuild_module
+	@printf "$(GREEN)Cross-compiling$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
+	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(X_PRESET)" --parallel $(NPROC) || \
+		(printf "$(RED)Cross-compile failed for $(1)$(NC)\n" && exit 1); \
+	else \
+		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
+	fi
+endef
+
+xbuild-%:
+	$(call check_xpreset)
+	$(call validate_module,$*)
+ifeq ($(MODE),monorepo)
+ifeq ($*,All)
+	@printf "$(GREEN)Cross-compiling all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) xbuild || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
+else
+	@printf "$(YELLOW)Delegating to module $* for xbuild...$(NC)\n"
+	@if [ -d "$*" ]; then \
+		cd $* && $(MAKE) xbuild; \
+	else \
+		printf "$(RED)ERROR: Module $* does not exist$(NC)\n"; \
+		exit 1; \
+	fi
+endif
+else
+ifeq ($*,All)
+	@printf "$(GREEN)Cross-compiling all modules in dependency order$(NC)\n"
+	@for mod in $(MODULES); do \
+		$(MAKE) xbuild_module_impl MODULE=$$mod || exit 1; \
+	done
+else
+	$(call check_module_exists,$*)
+	$(call xbuild_module,$*)
+endif
+endif
+
+xbuild_module_impl:
+	$(call xbuild_module,$(MODULE))
+
+xbuild-Project:
+ifeq ($(MODE),monorepo)
+	$(call check_xpreset)
+	@printf "$(GREEN)Cross-compiling$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
+	@mkdir -p $(X_BINARY_DIR)
+	@$(call run_xbuild,) || (printf "$(RED)$(BOLD)Cross-compile failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: xbuild-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
 endif
 
 #
@@ -849,7 +965,7 @@ pull-All:
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			printf "$(GREEN)Pulling module: $$mod$(NC)\n"; \
-			cd $$mod && $(MAKE) update && $(MAKE) pull || exit 1; \
+			cd $$mod && $(MAKE) pull || exit 1; \
 			cd - >/dev/null; \
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
