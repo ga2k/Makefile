@@ -1,4 +1,4 @@
-VERSION := 3.0.1
+VERSION := 3.0.2
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -288,7 +288,7 @@ endef
 # Auto-configures if build directory doesn't exist
 define run_build
 	$(call run_config)
-	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" --parallel $(NPROC) $(1)
+	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" --parallel 8 $(1)
 endef
 
 # Cross-compile config/build helpers — same logic as run_config/run_build but use X_PRESET
@@ -305,7 +305,7 @@ endef
 
 define run_xbuild
 	$(call run_xconfig)
-	cmake --build --preset "$(X_PRESET)" --parallel $(NPROC) $(1)
+	cmake --build --preset "$(X_PRESET)" --parallel 8 $(1)
 endef
 
 help:
@@ -549,7 +549,7 @@ endif
 define build_module
 	@printf "$(GREEN)Building$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" --parallel $(NPROC) || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(PRESET)" --parallel 8 || \
 		(printf "$(RED)Build failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -628,7 +628,7 @@ define stage_module
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
 		(printf "$(RED)Stage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -698,7 +698,7 @@ ifeq ($(MODE),monorepo)
 	done
 else
 	@printf "$(GREEN)Installing current module: $(CURRENT_DIR) (requires sudo)$(NC)\n"
-	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
+	@sudo cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
 		(printf "$(RED)Install failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
@@ -706,7 +706,7 @@ define install_module
 	@printf "$(GREEN)Installing module: $(1) (requires sudo)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		cd $(MODULE_PREFIX)/$(1) && \
-		sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
+		sudo cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
 		(printf "$(RED)Install failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
@@ -753,7 +753,7 @@ install_module_impl:
 install-Project:
 ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Installing$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) (requires sudo)\n"
-	@sudo cmake --build --preset "$(PRESET)" --parallel $(NPROC) --target install || \
+	@sudo cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
 		(printf "$(RED)Install failed for monorepo project$(NC)\n" && exit 1)
 else
 	$(error $(RED)ERROR: install-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
@@ -785,7 +785,7 @@ endif
 define xbuild_module
 	@printf "$(GREEN)Cross-compiling$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(X_PRESET)" --parallel $(NPROC) || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(X_PRESET)" --parallel 8 || \
 		(printf "$(RED)Cross-compile failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
