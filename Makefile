@@ -1,4 +1,4 @@
-VERSION := 3.0.2
+VERSION := 3.0.3
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -369,13 +369,8 @@ ifeq ($(MODE),monorepo)
 	done; \
 	exit $$ret
 else
-ifeq ($(strip $(EXECUTABLE)),true)
-	@printf "$(GREEN)EXECUTABLE=true: running build by default$(NC)\n"
-	@$(MAKE) build
-else
 	@printf "$(GREEN)EXECUTABLE=false: running stage by default$(NC)\n"
 	@$(MAKE) stage
-endif
 endif
 
 #
