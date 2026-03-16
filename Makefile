@@ -1,4 +1,4 @@
-VERSION := 3.0.3
+VERSION := 3.0.5
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -425,6 +425,7 @@ check-update:
 
 update-check: check-update
 
+
 #
 # CLEAN targets
 #
@@ -434,17 +435,29 @@ ifeq ($(MODE),monorepo)
 		printf "$(GREEN)Cleaning module: $$mod$(NC)\n"; \
 		if [ -d "$$mod" ]; then \
 			rm -rf "$$mod/build" "$$mod/out" "$$mod/external"; \
+			if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
+				printf "$(YELLOW)FULL clean: removing $$mod/archive$(NC)\n"; \
+				rm -rf "$$mod/archive"; \
+			fi; \
 		else \
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi \
 	done
 	@printf "$(GREEN)Cleaning monorepo$(NC)\n"
 	@rm -rf build out external
+	@if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
+		printf "$(YELLOW)FULL clean: removing archive$(NC)\n"; \
+		rm -rf archive; \
+	fi
 	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n"
 	@rm -rf $(STAGEDIR)
 else
 	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
 	@rm -rf build out external
+	@if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
+		printf "$(YELLOW)FULL clean: removing archive$(NC)\n"; \
+		rm -rf archive; \
+	fi
 endif
 
 #
