@@ -1,4 +1,4 @@
-VERSION := 3.0.5
+VERSION := 3.0.6
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -16,7 +16,7 @@ NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || ech
 
 .PHONY: help clean config build stage install xbuild push pull update silent quiet noisy \
         __autoupdate show-binary-dir default version check-update update-check \
-        config-Project build-Project stage-Project install-Project xbuild-Project \
+        config-Project build-Project stage-Project install-Project xbuild-Project xstage-Project \
         xbuild_module_impl
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
@@ -338,6 +338,7 @@ help:
 	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
 	@printf "  make install-Project        - Install monorepo CMakeLists directly (from $(MONOREPO) root)\n"
 	@printf "  make xbuild-Project         - Cross-compile monorepo project (from $(MONOREPO) root)\n"
+	@printf "  make xstage-Project         - Cross-compile and stage monorepo project to STAGEDIR (from $(MONOREPO) root)\n"
 	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
 	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make pull                   - Pull current module\n"
@@ -846,6 +847,18 @@ ifeq ($(MODE),monorepo)
 	@$(call run_xbuild,) || (printf "$(RED)$(BOLD)Cross-compile failed for monorepo project$(NC)\n" && exit 1)
 else
 	$(error $(RED)ERROR: xbuild-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
+endif
+
+xstage-Project:
+ifeq ($(MODE),monorepo)
+	$(call check_xpreset)
+	@printf "$(GREEN)Cross-compile staging$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) to $(STAGEDIR)\n"
+	@mkdir -p $(STAGEDIR)
+	@$(call run_xconfig)
+	@DESTDIR=$(STAGEDIR) cmake --build --preset "$(X_PRESET)" --parallel 8 --target install || \
+		(printf "$(RED)Cross-compile stage failed for monorepo project$(NC)\n" && exit 1)
+else
+	$(error $(RED)ERROR: xstage-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
 endif
 
 #
