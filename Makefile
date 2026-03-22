@@ -1,4 +1,4 @@
-VERSION := 3.0.6
+VERSION := 3.0.7
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
