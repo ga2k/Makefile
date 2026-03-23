@@ -695,19 +695,19 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
+	@printf "$(GREEN)X-Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
 	@mkdir -p $(STAGEDIR)
-	@$(call run_build,--target install,$(STAGEDIR)) || \
-		(printf "$(RED)XStage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+	@$(call run_xbuild,--target install,$(STAGEDIR)) || \
+		(printf "$(RED)X-Stage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define xstage_module
-	@printf "$(GREEN)XStaging module: $(1) to $(STAGEDIR)$(NC)\n"
+	@printf "$(GREEN)X-Staging module: $(1) to $(STAGEDIR)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
 		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
-		(printf "$(RED)XStage failed for $(1)$(NC)\n" && exit 1); \
+		(printf "$(RED)X-Stage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
 	fi
@@ -717,7 +717,7 @@ xstage-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(GREEN)XStaging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)X-Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) xstage || exit 1; \
@@ -737,7 +737,7 @@ else
 endif
 else
 ifeq ($*,All)
-	@printf "$(GREEN)XStaging all modules in dependency order$(NC)\n"
+	@printf "$(GREEN)X-Staging all modules in dependency order$(NC)\n"
 	@for mod in $(MODULES); do \
 		$(MAKE) xstage_module_impl MODULE=$$mod || exit 1; \
 	done
