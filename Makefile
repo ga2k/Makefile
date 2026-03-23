@@ -1,4 +1,4 @@
-VERSION := 3.0.7
+VERSION := 3.0.8
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -14,10 +14,8 @@ endif
 # Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
-.PHONY: help clean config build stage install xbuild push pull update silent quiet noisy \
-        __autoupdate show-binary-dir default version check-update update-check \
-        config-Project build-Project stage-Project install-Project xbuild-Project xstage-Project \
-        xbuild_module_impl
+.PHONY: help __autoupdate build build-Project check-update clean config config-Project default \ install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \ update-check version xbuild xbuild_module_impl xbuild-Project xstage xstage-Project
+
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
 # Default target will be overridden later to implement requested behavior
@@ -320,33 +318,34 @@ help:
 	@printf "Executable: $(EXECUTABLE)\n"
 	@printf "\n"
 	@printf "Available targets:\n"
-	@printf "  make version                - Print the version of the build system\n"
-	@printf "  make clean                  - Clean current module\n"
-	@printf "  make config                 - Configure current module\n"
 	@printf "  make build                  - Build current module (auto-configures if needed)\n"
-	@printf "  make stage                  - Stage current module to STAGEDIR\n"
-	@printf "  make install                - Install current module (requires sudo)\n"
-	@printf "  make xbuild                 - Cross-compile current module (requires X-PRESET in .modules)\n"
-	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
-	@printf "  make config-<Module|All>    - Configure specific module or all\n"
 	@printf "  make build-<Module|All>     - Build specific module or all\n"
-	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
-	@printf "  make install-<Module|All>   - Install specific module or all\n"
-	@printf "  make xbuild-<Module|All>    - Cross-compile specific module or all\n"
-	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from $(MONOREPO) root)\n"
 	@printf "  make build-Project          - Build monorepo CMakeLists directly (from $(MONOREPO) root)\n"
-	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make check-update           - Check for Makefile updates without updating\n"
+	@printf "  make clean                  - Clean current module\n"
+	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
+	@printf "  make config                 - Configure current module\n"
+	@printf "  make config-<Module|All>    - Configure specific module or all\n"
+	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make install                - Install current module (requires sudo)\n"
+	@printf "  make install-<Module|All>   - Install specific module or all\n"
 	@printf "  make install-Project        - Install monorepo CMakeLists directly (from $(MONOREPO) root)\n"
-	@printf "  make xbuild-Project         - Cross-compile monorepo project (from $(MONOREPO) root)\n"
-	@printf "  make xstage-Project         - Cross-compile and stage monorepo project to STAGEDIR (from $(MONOREPO) root)\n"
-	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
-	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
+	@printf "  make noisy                  - Re-enable daily update check messages\n"
 	@printf "  make pull                   - Pull current module\n"
 	@printf "  make pull-<Module|All>      - Pull specific module or all\n"
-	@printf "  make update                 - Force update Makefile from repository\n"
-	@printf "  make check-update           - Check for Makefile updates without updating\n"
+	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
+	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make quiet                  - Suppress daily update check messages\n"
-	@printf "  make noisy                  - Re-enable daily update check messages\n"
+	@printf "  make stage                  - Stage current module to STAGEDIR\n"
+	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
+	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
+	@printf "  make update                 - Force update Makefile from repository\n"
+	@printf "  make version                - Print the version of the build system\n"
+	@printf "  make xbuild                 - Cross-compile current module (requires X-PRESET in .modules)\n"
+	@printf "  make xbuild-<Module|All>    - Cross-compile specific module or all\n"
+	@printf "  make xbuild-Project         - Cross-compile monorepo project (from $(MONOREPO) root)\n"
+	@printf "  make xstage                 - Cross-compile and Stage current module to STAGEDIR\n"
+	@printf "  make xstage-Project         - Cross-compile and stage monorepo project to STAGEDIR (from $(MONOREPO) root)\n"
 	@printf "  show-binary-dir             - Display the binary dir for this preset\n"
 	@printf "\n"
 	@printf "  (alias: 'make silent' behaves the same as 'make quiet')\n"
@@ -680,6 +679,76 @@ endif
 
 stage_module_impl:
 	$(call stage_module,$(MODULE))
+
+#
+# XSTAGE targets
+#
+xstage:
+ifeq ($(MODE),monorepo)
+	@printf "$(GREEN)X-Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) xstage || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
+else
+	@printf "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
+	@mkdir -p $(STAGEDIR)
+	@$(call run_build,--target install,$(STAGEDIR)) || \
+		(printf "$(RED)XStage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+endif
+
+define xstage_module
+	@printf "$(GREEN)XStaging module: $(1) to $(STAGEDIR)$(NC)\n"
+	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
+		mkdir -p $(STAGEDIR) && \
+		cd $(MODULE_PREFIX)/$(1) && \
+		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
+		(printf "$(RED)XStage failed for $(1)$(NC)\n" && exit 1); \
+	else \
+		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
+	fi
+endef
+
+xstage-%:
+	$(call validate_module,$*)
+ifeq ($(MODE),monorepo)
+ifeq ($*,All)
+	@printf "$(GREEN)XStaging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@for mod in $(MODULES); do \
+		if [ -d "$$mod" ]; then \
+			cd $$mod && $(MAKE) xstage || exit 1; \
+			cd - >/dev/null; \
+		else \
+			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
+		fi; \
+	done
+else
+	@printf "$(YELLOW)Delegating to module $* for xstage...$(NC)\n"
+	@if [ -d "$*" ]; then \
+		cd $* && $(MAKE) xstage; \
+	else \
+		printf "$(RED)ERROR: Module $* does not exist$(NC)\n"; \
+		exit 1; \
+	fi
+endif
+else
+ifeq ($*,All)
+	@printf "$(GREEN)XStaging all modules in dependency order$(NC)\n"
+	@for mod in $(MODULES); do \
+		$(MAKE) xstage_module_impl MODULE=$$mod || exit 1; \
+	done
+else
+	$(call check_module_exists,$*)
+	$(call xstage_module,$*)
+endif
+endif
+
+xstage_module_impl:
+	$(call xstage_module,$(MODULE))
 
 stage-Project:
 ifeq ($(MODE),monorepo)
@@ -1038,3 +1107,4 @@ else
 	@cd $(MODULE_PREFIX)/$* && $(git_pull_repo) || exit 1
 endif
 endif
+
