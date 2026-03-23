@@ -1,4 +1,4 @@
-VERSION := 3.0.8
+VERSION := 3.0.9
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -14,7 +14,7 @@ endif
 # Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
-.PHONY: help __autoupdate build build-Project check-update clean config config-Project default \ install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \ update-check version xbuild xbuild_module_impl xbuild-Project xstage xstage-Project
+.PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \ install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \ update-check version xbuild xbuild_module_impl xbuild-Project xstage xstage-Project
 
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
@@ -324,6 +324,7 @@ help:
 	@printf "  make check-update           - Check for Makefile updates without updating\n"
 	@printf "  make clean                  - Clean current module\n"
 	@printf "  make clean-<Module|All>     - Clean specific module or all\n"
+	@printf "  make clear                  - Clear the terminal (screen)\n"
 	@printf "  make config                 - Configure current module\n"
 	@printf "  make config-<Module|All>    - Configure specific module or all\n"
 	@printf "  make config-Project         - Configure monorepo CMakeLists directly (from $(MONOREPO) root)\n"
@@ -353,6 +354,9 @@ help:
 	@printf "Default target behavior:\n"
 	@printf "  - In module directories: if EXECUTABLE=true -> build; else -> stage\n"
 	@printf "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES\n"
+
+clear:
+	@tput clear
 
 # Default target
 default:
@@ -695,19 +699,19 @@ ifeq ($(MODE),monorepo)
 		fi; \
 	done
 else
-	@printf "$(GREEN)X-Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
+	@printf "$(GREEN)Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
 	@mkdir -p $(STAGEDIR)
-	@$(call run_xbuild,--target install,$(STAGEDIR)) || \
-		(printf "$(RED)X-Stage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
+	@$(call run_build,--target install,$(STAGEDIR)) || \
+		(printf "$(RED)XStage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
 endif
 
 define xstage_module
-	@printf "$(GREEN)X-Staging module: $(1) to $(STAGEDIR)$(NC)\n"
+	@printf "$(GREEN)XStaging module: $(1) to $(STAGEDIR)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
 		mkdir -p $(STAGEDIR) && \
 		cd $(MODULE_PREFIX)/$(1) && \
 		DESTDIR=$(STAGEDIR) cmake --build --preset "$(PRESET)" --parallel 8 --target install || \
-		(printf "$(RED)X-Stage failed for $(1)$(NC)\n" && exit 1); \
+		(printf "$(RED)XStage failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
 	fi
@@ -717,7 +721,7 @@ xstage-%:
 	$(call validate_module,$*)
 ifeq ($(MODE),monorepo)
 ifeq ($*,All)
-	@printf "$(GREEN)X-Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
+	@printf "$(GREEN)XStaging all modules in MONOREPO $(MONOREPO)$(NC)\n"
 	@for mod in $(MODULES); do \
 		if [ -d "$$mod" ]; then \
 			cd $$mod && $(MAKE) xstage || exit 1; \
@@ -737,7 +741,7 @@ else
 endif
 else
 ifeq ($*,All)
-	@printf "$(GREEN)X-Staging all modules in dependency order$(NC)\n"
+	@printf "$(GREEN)XStaging all modules in dependency order$(NC)\n"
 	@for mod in $(MODULES); do \
 		$(MAKE) xstage_module_impl MODULE=$$mod || exit 1; \
 	done
