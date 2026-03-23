@@ -1,4 +1,4 @@
-VERSION := 3.0.9
+VERSION := 3.0.10
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -109,7 +109,9 @@ __autoupdate:
 		read ans; \
 		if [ "$$ans" = "y" ] || [ "$$ans" = "Y" ]; then \
 			cp Makefile "$$TMP_DIR/Makefile"; \
+			SSH_REPO=$$(echo "$(REPO)" | sed 's|https://github.com/|git@github.com:|'); \
 			(cd "$$TMP_DIR" && \
+			 git remote set-url origin "$$SSH_REPO" && \
 			 git add . && \
 			 git commit -m "push updated version ($(VERSION)) to repo" && \
 			 git push); \
