@@ -1,4 +1,4 @@
-VERSION := 3.0.10
+VERSION := 3.0.11
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -7,7 +7,7 @@ ifeq ($(OS),Windows_NT)
 
     # 2. Add the Git 'usr/bin' folder to the path (where grep and sed live)
     # Using ':=' for immediate evaluation. Adjust the path below if yours is different.
-    GIT_BIN := /c/Program Files/Git/usr/bin
+    GIT_BIN := /c/Git/usr/bin
     export PATH := $(GIT_BIN):$(PATH)
 endif
 
@@ -129,14 +129,14 @@ endif
 endif
 
 # Parse .modules file
-MONOREPO := $(shell grep -E '^MONOREPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
-MODULES := $(shell grep -E '^MODULES\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^#]*\).*/\1/')
-STAGEDIR := $(shell grep -E '^STAGEDIR\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
-PRESET_FILE := $(shell grep -E '^PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
-X_PRESET_FILE := $(shell grep -E '^X-PRESET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\(.*\)/\1/' | sed 's/^"\(.*\)"$$/\1/' | sed "s/^'\(.*\)'$$/\1/" | sed 's/[ \t]*#.*//' | sed 's/[ \t]*$$//')
-EXECUTABLE := $(shell grep -E '^EXECUTABLE\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
-QUIET_VAL := $(shell grep -E '^QUIET\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
-REPO := $(shell grep -E '^REPO\s*:=' .modules 2>/dev/null | sed 's/.*:=\s*\([^ \t#]*\).*/\1/')
+MONOREPO    := $(shell python3 cmake/parse_modules.py MONOREPO)
+MODULES     := $(shell python3 cmake/parse_modules.py MODULES)
+STAGEDIR    := $(shell python3 cmake/parse_modules.py STAGEDIR)
+PRESET_FILE := $(shell python3 cmake/parse_modules.py PRESET)
+X_PRESET_FILE := $(shell python3 cmake/parse_modules.py X-PRESET)
+EXECUTABLE  := $(shell python3 cmake/parse_modules.py EXECUTABLE)
+QUIET_VAL   := $(shell python3 cmake/parse_modules.py QUIET)
+REPO        := $(shell python3 cmake/parse_modules.py REPO)
 
 # Set defaults
 STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
@@ -145,47 +145,8 @@ X_PRESET := $(if $(X_PRESET_FILE),$(X_PRESET_FILE),)
 EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
 QUIET := $(if $(filter true,$(QUIET_VAL)),true,false)
 
-# Shared Python helper for resolving preset binaryDir through inheritance chains.
-# Usage: $(call _resolve_binary_dir,PRESET_NAME)
 define _resolve_binary_dir
-$(strip $(shell python3 -c '
-import json, re, sys
-
-def get_preset_with_inheritance(presets, name, visited=None):
-    if visited is None:
-        visited = set()
-    if name in visited:
-        return {}
-    visited.add(name)
-    preset = next((p for p in presets if p.get("name") == name), None)
-    if not preset:
-        return {}
-    result = {"environment": {}, "cacheVariables": {}}
-    for parent_name in preset.get("inherits", []):
-        parent = get_preset_with_inheritance(presets, parent_name, visited)
-        result["environment"].update(parent.get("environment", {}))
-        result["cacheVariables"].update(parent.get("cacheVariables", {}))
-    result["environment"].update(preset.get("environment", {}))
-    result["cacheVariables"].update(preset.get("cacheVariables", {}))
-    result["binaryDir"] = preset.get("binaryDir", "")
-    return result
-
-try:
-    with open("CMakePresets.json") as f:
-        data = json.load(f)
-except Exception:
-    print("", end="")
-    sys.exit(0)
-
-preset = get_preset_with_inheritance(data["configurePresets"], "$(1)")
-binary_dir = preset.get("binaryDir", "")
-
-def resolve_env(match):
-    return preset["environment"].get(match.group(1), "")
-
-binary_dir = re.sub(r"\$$env\{([^}]+)\}", resolve_env, binary_dir)
-print(binary_dir, end="")
-'))
+$(strip $(shell python3 cmake/resolve_binary_dir.py "$(1)"))
 endef
 
 BINARY_DIR := $(call _resolve_binary_dir,$(PRESET))
