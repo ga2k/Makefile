@@ -1,4 +1,4 @@
-VERSION := 3.0.11
+VERSION := 3.0.12
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -151,6 +151,9 @@ endef
 
 BINARY_DIR := $(call _resolve_binary_dir,$(PRESET))
 X_BINARY_DIR := $(if $(X_PRESET),$(call _resolve_binary_dir,$(X_PRESET)),)
+PRESET_SUBDIR := $(patsubst build/%,%,$(BINARY_DIR))
+OUT_DIR    := out/$(PRESET_SUBDIR)
+EXT_DIR    := external/$(PRESET_SUBDIR)
 
 .PHONY: show-binary-dir
 show-binary-dir:
@@ -399,9 +402,9 @@ update-check: check-update
 clean:
 ifeq ($(MODE),monorepo)
 	@for mod in $(MODULES); do \
-		printf "$(GREEN)Cleaning module: $$mod$(NC)\n"; \
+		printf "$(GREEN)Cleaning module: $$mod [$(PRESET)]$(NC)\n"; \
 		if [ -d "$$mod" ]; then \
-			rm -rf "$$mod/build" "$$mod/out" "$$mod/external"; \
+			rm -rf "$$mod/$(BINARY_DIR)" "$$mod/$(OUT_DIR)" "$$mod/$(EXT_DIR)"; \
 			if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
 				printf "$(YELLOW)FULL clean: removing $$mod/archive$(NC)\n"; \
 				rm -rf "$$mod/archive"; \
@@ -410,8 +413,8 @@ ifeq ($(MODE),monorepo)
 			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
 		fi \
 	done
-	@printf "$(GREEN)Cleaning monorepo$(NC)\n"
-	@rm -rf build out external
+	@printf "$(GREEN)Cleaning monorepo [$(PRESET)]$(NC)\n"
+	@rm -rf $(BINARY_DIR) $(OUT_DIR) $(EXT_DIR)
 	@if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
 		printf "$(YELLOW)FULL clean: removing archive$(NC)\n"; \
 		rm -rf archive; \
@@ -419,8 +422,8 @@ ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Removing staging directory: $(STAGEDIR)$(NC)\n"
 	@rm -rf $(STAGEDIR)
 else
-	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR)$(NC)\n"
-	@rm -rf build out external
+	@printf "$(GREEN)Cleaning current module: $(CURRENT_DIR) [$(PRESET)]$(NC)\n"
+	@rm -rf $(BINARY_DIR) $(OUT_DIR) $(EXT_DIR)
 	@if [ "$(FULL)" = "true" ] || [ "$(FULL)" = "TRUE" ] || [ "$(FULL)" = "1" ]; then \
 		printf "$(YELLOW)FULL clean: removing archive$(NC)\n"; \
 		rm -rf archive; \
