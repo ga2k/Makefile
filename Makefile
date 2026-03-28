@@ -1,4 +1,4 @@
-VERSION := 3.0.13
+VERSION := 3.1.1
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -14,7 +14,9 @@ endif
 # Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
-.PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \ install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \ update-check version xbuild xbuild_module_impl xbuild-Project xstage xstage-Project
+.PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \
+	install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \
+	update-check version
 
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
@@ -45,7 +47,6 @@ NC := \033[0m
 # Export MSG, PRESET, X_PRESET and FORCE for recursive make calls
 export MSG
 export PRESET
-export X_PRESET
 export FORCE
 
 # Ensure auto-update runs before the user's goals (skip for update/silent/noisy/version/check-update/update-check)
@@ -129,19 +130,18 @@ endif
 endif
 
 # Parse .modules file
-MONOREPO    := $(shell python3 cmake/parse_modules.py MONOREPO)
-MODULES     := $(shell python3 cmake/parse_modules.py MODULES)
-STAGEDIR    := $(shell python3 cmake/parse_modules.py STAGEDIR)
-PRESET_FILE := $(shell python3 cmake/parse_modules.py PRESET)
+MONOREPO      := $(shell python3 cmake/parse_modules.py MONOREPO)
+MODULES       := $(shell python3 cmake/parse_modules.py MODULES)
+STAGEDIR      := $(shell python3 cmake/parse_modules.py STAGEDIR)
+PRESET_FILE   := $(shell python3 cmake/parse_modules.py PRESET)
 X_PRESET_FILE := $(shell python3 cmake/parse_modules.py X-PRESET)
-EXECUTABLE  := $(shell python3 cmake/parse_modules.py EXECUTABLE)
-QUIET_VAL   := $(shell python3 cmake/parse_modules.py QUIET)
-REPO        := $(shell python3 cmake/parse_modules.py REPO)
+EXECUTABLE    := $(shell python3 cmake/parse_modules.py EXECUTABLE)
+QUIET_VAL     := $(shell python3 cmake/parse_modules.py QUIET)
+REPO          := $(shell python3 cmake/parse_modules.py REPO)
 
 # Set defaults
 STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
 PRESET := $(if $(PRESET_FILE),$(PRESET_FILE),default)
-X_PRESET := $(if $(X_PRESET_FILE),$(X_PRESET_FILE),)
 EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
 QUIET := $(if $(filter true,$(QUIET_VAL)),true,false)
 
@@ -150,7 +150,6 @@ $(strip $(shell python3 cmake/resolve_binary_dir.py "$(1)"))
 endef
 
 BINARY_DIR := $(call _resolve_binary_dir,$(PRESET))
-X_BINARY_DIR := $(if $(X_PRESET),$(call _resolve_binary_dir,$(X_PRESET)),)
 PRESET_SUBDIR := $(patsubst build/%,%,$(BINARY_DIR))
 OUT_DIR    := out/$(PRESET_SUBDIR)
 EXT_DIR    := external/$(PRESET_SUBDIR)
@@ -209,11 +208,6 @@ define check_module_exists
 	$(if $(filter $(1),All),,$(if $(wildcard $(MODULE_PREFIX)/$(1)),,$(error $(RED)ERROR: Module directory '$(MODULE_PREFIX)/$(1)' does not exist$(NC))))
 endef
 
-# Guard macro for cross-compile targets — fails clearly if X-PRESET not set
-define check_xpreset
-	$(if $(X_PRESET),,$(error $(RED)ERROR: X-PRESET not defined in .modules — cannot cross-compile$(NC)))
-endef
-
 # Build directory determination (from preset)
 BUILD_DIR := build
 
@@ -255,23 +249,6 @@ define run_build
 	$(if $(2),DESTDIR=$(2)) cmake --build --preset "$(PRESET)" --parallel 8 $(1)
 endef
 
-# Cross-compile config/build helpers — same logic as run_config/run_build but use X_PRESET
-define run_xconfig
-	$(call ensure_presets)
-	printf "$(GREEN)Configuring$(NC) (cross-compile) with preset $(BOLD)$(X_PRESET)$(NC) "
-	if [ ! -f "$(X_BINARY_DIR)/CMakeCache.txt" ] || [ ! -f "$(X_BINARY_DIR)/build.ninja" ]; then \
-		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(X_BINARY_DIR) --preset "$(X_PRESET)" -DCOLOUR=ON || exit 1; \
-	else \
-		printf "$(GREEN)not required$(NC), skipping...\n"; \
-	fi
-endef
-
-define run_xbuild
-	$(call run_xconfig)
-	cmake --build --preset "$(X_PRESET)" --parallel 8 $(1)
-endef
-
 help:
 	@printf "$(GREEN)Multi-Module CMake Build System$(NC)\n"
 	@printf "Mode: $(MODE)\n"
@@ -308,17 +285,10 @@ help:
 	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
 	@printf "  make update                 - Force update Makefile from repository\n"
 	@printf "  make version                - Print the version of the build system\n"
-	@printf "  make xbuild                 - Cross-compile current module (requires X-PRESET in .modules)\n"
-	@printf "  make xbuild-<Module|All>    - Cross-compile specific module or all\n"
-	@printf "  make xbuild-Project         - Cross-compile monorepo project (from $(MONOREPO) root)\n"
-	@printf "  make xstage                 - Cross-compile and Stage current module to STAGEDIR\n"
-	@printf "  make xstage-Project         - Cross-compile and stage monorepo project to STAGEDIR (from $(MONOREPO) root)\n"
 	@printf "  show-binary-dir             - Display the binary dir for this preset\n"
 	@printf "\n"
-	@printf "  (alias: 'make silent' behaves the same as 'make quiet')\n"
-	@printf "\n"
 	@printf "Default target behavior:\n"
-	@printf "  - In module directories: if EXECUTABLE=true -> build; else -> stage\n"
+	@printf "  - In module directories: stage\n"
 	@printf "  - In monorepo root (CWD == MONOREPO): run default in all modules listed in MODULES\n"
 
 clear:
@@ -650,76 +620,6 @@ endif
 stage_module_impl:
 	$(call stage_module,$(MODULE))
 
-#
-# XSTAGE targets
-#
-xstage:
-ifeq ($(MODE),monorepo)
-	@printf "$(GREEN)X-Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
-	@for mod in $(MODULES); do \
-		if [ -d "$$mod" ]; then \
-			cd $$mod && $(MAKE) xstage || exit 1; \
-			cd - >/dev/null; \
-		else \
-			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
-		fi; \
-	done
-else
-	@printf "$(GREEN)X-Staging current module: $(CURRENT_DIR) to $(STAGEDIR)$(NC)\n"
-	@mkdir -p $(STAGEDIR)
-	@$(call run_build,--target install,$(STAGEDIR)) || \
-		(printf "$(RED)X-Stage failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
-endif
-
-define xstage_module
-	@printf "$(GREEN)XStaging module: $(1) to $(STAGEDIR)$(NC)\n"
-	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		mkdir -p $(STAGEDIR) && \
-		cd $(MODULE_PREFIX)/$(1) && \
-		DESTDIR=$(STAGEDIR) cmake --build --preset "$(XPRESET)" --parallel 8 --target install || \
-		(printf "$(RED)X-Stage failed for $(1)$(NC)\n" && exit 1); \
-	else \
-		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
-	fi
-endef
-
-xstage-%:
-	$(call validate_module,$*)
-ifeq ($(MODE),monorepo)
-ifeq ($*,All)
-	@printf "$(GREEN)X-Staging all modules in MONOREPO $(MONOREPO)$(NC)\n"
-	@for mod in $(MODULES); do \
-		if [ -d "$$mod" ]; then \
-			cd $$mod && $(MAKE) xstage || exit 1; \
-			cd - >/dev/null; \
-		else \
-			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
-		fi; \
-	done
-else
-	@printf "$(YELLOW)Delegating to module $* for xstage...$(NC)\n"
-	@if [ -d "$*" ]; then \
-		cd $* && $(MAKE) xstage; \
-	else \
-		printf "$(RED)ERROR: Module $* does not exist$(NC)\n"; \
-		exit 1; \
-	fi
-endif
-else
-ifeq ($*,All)
-	@printf "$(GREEN)XStaging all modules in dependency order$(NC)\n"
-	@for mod in $(MODULES); do \
-		$(MAKE) xstage_module_impl MODULE=$$mod || exit 1; \
-	done
-else
-	$(call check_module_exists,$*)
-	$(call xstage_module,$*)
-endif
-endif
-
-xstage_module_impl:
-	$(call xstage_module,$(MODULE))
-
 stage-Project:
 ifeq ($(MODE),monorepo)
 	@printf "$(GREEN)Staging$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) to $(STAGEDIR)\n"
@@ -805,99 +705,6 @@ ifeq ($(MODE),monorepo)
 		(printf "$(RED)Install failed for monorepo project$(NC)\n" && exit 1)
 else
 	$(error $(RED)ERROR: install-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
-endif
-
-#
-# XBUILD targets (cross-compile — requires X-PRESET in .modules)
-# Note: cross-compile targets are build-only; stage/install are not supported
-# since the output binaries target a different OS.
-#
-xbuild:
-	$(call check_xpreset)
-ifeq ($(MODE),monorepo)
-	@printf "$(GREEN)Cross-compiling$(NC) all modules in MONOREPO $(BOLD)$(MONOREPO)$(NC)\n"
-	@for mod in $(MODULES); do \
-		if [ -d "$$mod" ]; then \
-			cd $$mod && $(MAKE) xbuild || exit 1; \
-			cd - >/dev/null; \
-		else \
-			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
-		fi; \
-	done
-else
-	@printf "$(GREEN)Cross-compiling$(NC) current module: $(BOLD)$(CURRENT_DIR)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
-	@mkdir -p $(X_BINARY_DIR)
-	@$(call run_xbuild,) || (printf "$(RED)$(BOLD)Cross-compile failed for $(CURRENT_DIR)$(NC)\n" && exit 1)
-endif
-
-define xbuild_module
-	@printf "$(GREEN)Cross-compiling$(NC) module: $(BOLD)$(1)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
-	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --build --preset "$(X_PRESET)" --parallel 8 || \
-		(printf "$(RED)Cross-compile failed for $(1)$(NC)\n" && exit 1); \
-	else \
-		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
-	fi
-endef
-
-xbuild-%:
-	$(call check_xpreset)
-	$(call validate_module,$*)
-ifeq ($(MODE),monorepo)
-ifeq ($*,All)
-	@printf "$(GREEN)Cross-compiling all modules in MONOREPO $(MONOREPO)$(NC)\n"
-	@for mod in $(MODULES); do \
-		if [ -d "$$mod" ]; then \
-			cd $$mod && $(MAKE) xbuild || exit 1; \
-			cd - >/dev/null; \
-		else \
-			printf "$(YELLOW)Warning: Module $$mod does not exist, skipping$(NC)\n"; \
-		fi; \
-	done
-else
-	@printf "$(YELLOW)Delegating to module $* for xbuild...$(NC)\n"
-	@if [ -d "$*" ]; then \
-		cd $* && $(MAKE) xbuild; \
-	else \
-		printf "$(RED)ERROR: Module $* does not exist$(NC)\n"; \
-		exit 1; \
-	fi
-endif
-else
-ifeq ($*,All)
-	@printf "$(GREEN)Cross-compiling all modules in dependency order$(NC)\n"
-	@for mod in $(MODULES); do \
-		$(MAKE) xbuild_module_impl MODULE=$$mod || exit 1; \
-	done
-else
-	$(call check_module_exists,$*)
-	$(call xbuild_module,$*)
-endif
-endif
-
-xbuild_module_impl:
-	$(call xbuild_module,$(MODULE))
-
-xbuild-Project:
-ifeq ($(MODE),monorepo)
-	$(call check_xpreset)
-	@printf "$(GREEN)Cross-compiling$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) with preset $(BOLD)$(X_PRESET)$(NC)\n"
-	@mkdir -p $(X_BINARY_DIR)
-	@$(call run_xbuild,) || (printf "$(RED)$(BOLD)Cross-compile failed for monorepo project$(NC)\n" && exit 1)
-else
-	$(error $(RED)ERROR: xbuild-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
-endif
-
-xstage-Project:
-ifeq ($(MODE),monorepo)
-	$(call check_xpreset)
-	@printf "$(GREEN)Cross-compile staging$(NC) monorepo project $(BOLD)$(MONOREPO)$(NC) to $(STAGEDIR)\n"
-	@mkdir -p $(STAGEDIR)
-	@$(call run_xconfig)
-	@DESTDIR=$(STAGEDIR) cmake --build --preset "$(X_PRESET)" --parallel 8 --target install || \
-		(printf "$(RED)Cross-compile stage failed for monorepo project$(NC)\n" && exit 1)
-else
-	$(error $(RED)ERROR: xstage-Project can only be run from the monorepo root ($(MONOREPO))$(NC))
 endif
 
 #
