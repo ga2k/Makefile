@@ -1,4 +1,4 @@
-VERSION := 3.1.1
+VERSION := 3.1.2
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -15,8 +15,8 @@ endif
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
 .PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \
-	install install-Project noisy pull push quiet show-binary-dir silent stage stage-Project update \
-	update-check version
+	install install-Project noisy pull push quiet setup-wincross show-binary-dir silent stage \
+	stage-Project update update-check version
 
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
@@ -280,6 +280,7 @@ help:
 	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
 	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make quiet                  - Suppress daily update check messages\n"
+	@printf "  make setup-wincross         - Create MinGW sysroot symlinks needed for wxWidgets (requires sudo)\n"
 	@printf "  make stage                  - Stage current module to STAGEDIR\n"
 	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
 	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
@@ -619,6 +620,38 @@ endif
 
 stage_module_impl:
 	$(call stage_module,$(MODULE))
+
+setup-wincross:
+	@WXLIB=/usr/x86_64-w64-mingw32/sys-root/mingw/lib; \
+	WX_VER=$$(ls "$$WXLIB"/libwx_mswu-*-Windows.a 2>/dev/null | head -1 | \
+	          sed 's|.*libwx_mswu-\([0-9][0-9.]*\)-Windows\.a|\1|'); \
+	if [ -z "$$WX_VER" ]; then \
+	    printf "$(RED)wxWidgets not found in MinGW sysroot — nothing to do$(NC)\n"; \
+	    exit 0; \
+	fi; \
+	printf "$(GREEN)wxWidgets version: $$WX_VER$(NC)\n"; \
+	for BASE in \
+	    libwx_mswu libwx_mswu_adv libwx_mswu_aui libwx_mswu_core \
+	    libwx_mswu_gl libwx_mswu_html libwx_mswu_media libwx_mswu_propgrid \
+	    libwx_mswu_qa libwx_mswu_ribbon libwx_mswu_richtext libwx_mswu_stc \
+	    libwx_mswu_webview libwx_mswu_xrc \
+	    libwx_baseu libwx_baseu_net libwx_baseu_xml; do \
+	    SRC="$$WXLIB/$$BASE-$$WX_VER-Windows.a"; \
+	    DST="$$WXLIB/$$BASE-$$WX_VER.a"; \
+	    if [ -f "$$SRC" ] && [ ! -e "$$DST" ]; then \
+	        printf "  $(YELLOW)ln -sf$(NC) $$BASE-$$WX_VER-Windows.a  ->  $$BASE-$$WX_VER.a\n"; \
+	        sudo ln -sf "$$SRC" "$$DST"; \
+	    fi; \
+	done; \
+	for LIB in wxwebp wxwebpdemux wxsharpyuv; do \
+	    SRC="$$WXLIB/$$LIB.a"; \
+	    DST="$$WXLIB/lib$$LIB.a"; \
+	    if [ -f "$$SRC" ] && [ ! -e "$$DST" ]; then \
+	        printf "  $(YELLOW)ln -sf$(NC) $$LIB.a  ->  lib$$LIB.a\n"; \
+	        sudo ln -sf "$$SRC" "$$DST"; \
+	    fi; \
+	done; \
+	printf "$(GREEN)setup-wincross complete$(NC)\n"
 
 stage-Project:
 ifeq ($(MODE),monorepo)
