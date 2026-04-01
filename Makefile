@@ -1,4 +1,4 @@
-VERSION := 3.1.2
+VERSION := 3.1.3
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -294,7 +294,8 @@ help:
 
 clear:
 	@tput clear
-
+	@reset 2>/dev/null
+    
 # Default target
 default:
 ifeq ($(MODE),monorepo)
