@@ -1,4 +1,4 @@
-VERSION := 3.1.3
+VERSION := 3.1.4
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -234,7 +234,7 @@ define run_config
 	printf "$(GREEN)Configuring$(NC) with preset $(BOLD)$(PRESET)$(NC) "
 	if [ ! -f "$(BINARY_DIR)/CMakeCache.txt" ] || [ ! -f "$(BINARY_DIR)/build.ninja" ] && [ ! -f "$(BINARY_DIR)/Makefile" ]; then \
 		printf "$(YELLOW)required, configuring...$(NC)\n"; \
-		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" -DCOLOUR=ON || exit 1; \
+		cmake -S . -B $(BINARY_DIR) --preset "$(PRESET)" -DCOLOUR=ON -Dcmake_root=$(CURDIR)/cmake || exit 1; \
 	else \
 		printf "$(GREEN)not required$(NC), skipping...\n"; \
 	fi
@@ -424,7 +424,7 @@ endif
 define config_module
 	@printf "$(GREEN)Configuring module: $(1) with preset $(BOLD)$(PRESET)$(NC)$(NC)\n"
 	@if [ -d "$(MODULE_PREFIX)/$(1)" ]; then \
-		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" -DCOLOUR=ON || \
+		cd $(MODULE_PREFIX)/$(1) && cmake --preset "$(PRESET)" -DCOLOUR=ON -Dcmake_root=$(CURDIR)/cmake || \
 		(printf "$(RED)Configure failed for $(1)$(NC)\n" && exit 1); \
 	else \
 		printf "$(YELLOW)Warning: Module $(1) does not exist, skipping$(NC)\n"; \
