@@ -1,4 +1,4 @@
-VERSION := 3.1.5
+VERSION := 3.1.6
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -141,20 +141,21 @@ EXECUTABLE    := $(shell python3 cmake/parse_modules.py EXECUTABLE)
 QUIET_VAL     := $(shell python3 cmake/parse_modules.py QUIET)
 REPO          := $(shell python3 cmake/parse_modules.py REPO)
 
-# Set defaults
-STAGEDIR := $(if $(STAGEDIR),$(STAGEDIR),~/dev/stage)
-PRESET := $(if $(PRESET_FILE),$(PRESET_FILE),default)
-EXECUTABLE := $(if $(EXECUTABLE),$(EXECUTABLE),false)
-QUIET := $(if $(filter true,$(QUIET_VAL)),true,false)
-
 define _resolve_binary_dir
 $(strip $(shell python3 cmake/resolve_binary_dir.py "$(1)"))
 endef
 
-BINARY_DIR := $(call _resolve_binary_dir,$(PRESET))
-PRESET_SUBDIR := $(patsubst build/%,%,$(BINARY_DIR))
-OUT_DIR    := out/$(PRESET_SUBDIR)
-EXT_DIR    := external/$(PRESET_SUBDIR)
+# Set defaults
+STAGEDIR        := $(if $(STAGEDIR),$(STAGEDIR),$(HOME)/dev/stage)
+PRESET          := $(if $(PRESET_FILE),$(PRESET_FILE),default)
+EXECUTABLE      := $(if $(EXECUTABLE),$(EXECUTABLE),false)
+QUIET           := $(if $(filter true,$(QUIET_VAL)),true,false)
+
+BINARY_DIR      := $(call _resolve_binary_dir,$(PRESET))
+PRESET_SUBDIR   := $(patsubst build/%,%,$(BINARY_DIR))
+OUT_DIR         := out/$(PRESET_SUBDIR)
+EXT_DIR         := external/$(PRESET_SUBDIR)
+STAGEDIR        := $(STAGEDIR)/$(PRESET_SUBDIR)
 
 .PHONY: show-binary-dir
 show-binary-dir:
