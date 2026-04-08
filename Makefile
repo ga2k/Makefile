@@ -1,21 +1,23 @@
-VERSION := 3.1.4
+VERSION := 3.1.5
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
     # 1. Force Make to use sh.exe so your pipe/sed logic works
     SHELL := sh.exe
-
+	TDIR := $(subst \,/,$(TEMP))
     # 2. Add the Git 'usr/bin' folder to the path (where grep and sed live)
     # Using ':=' for immediate evaluation. Adjust the path below if yours is different.
     GIT_BIN := /c/Git/usr/bin
     export PATH := $(GIT_BIN):$(PATH)
+else
+    TDIR := /tmp
 endif
 
 # Detect available CPU threads (works on macOS, Linux, and Windows/Git-bash)
 NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || echo 1)
 
 .PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \
-	install install-Project noisy pull push quiet setup-wincross show-binary-dir silent stage \
+	install install-Project noisy pull push quiet setup-winx show-binary-dir silent stage \
 	stage-Project update update-check version
 
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
@@ -73,7 +75,7 @@ __autoupdate:
 		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)REPO not defined in .modules, skipping update check.$(NC)\n"; fi; \
 		exit 0; \
 	fi; \
-	TMP_DIR=$$(mktemp -d /tmp/makefile.repo.XXXXXX); \
+	TMP_DIR=$$(mktemp -d $(TDIR)/makefile.repo.XXXXXX); \
 	if [ "$$IS_SILENT" -ne 1 ]; then printf "Checking for updates from $(REPO)...\n"; fi; \
 	if ! git clone --depth 1 "$(REPO)" "$$TMP_DIR" >/dev/null 2>&1; then \
 		if [ "$$IS_SILENT" -ne 1 ]; then printf "$(RED)Failed to clone repo for update check.$(NC)\n"; fi; \
@@ -280,7 +282,7 @@ help:
 	@printf "  make push [MSG=\"msg\"]       - Commit and push current module\n"
 	@printf "  make push-<Module|All>      - Commit and push specific module or all\n"
 	@printf "  make quiet                  - Suppress daily update check messages\n"
-	@printf "  make setup-wincross         - Create MinGW sysroot symlinks needed for wxWidgets (requires sudo)\n"
+	@printf "  make setup-winx         - Create MinGW sysroot symlinks needed for wxWidgets (requires sudo)\n"
 	@printf "  make stage                  - Stage current module to STAGEDIR\n"
 	@printf "  make stage-<Module|All>     - Stage specific module or all\n"
 	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
@@ -347,7 +349,7 @@ check-update:
 		printf "$(RED)REPO not defined in .modules$(NC)\n"; \
 		exit 1; \
 	fi; \
-	TMP_DIR=$$(mktemp -d /tmp/makefile.repo.XXXXXX); \
+	TMP_DIR=$$(mktemp -d $(TDIR)/makefile.repo.XXXXXX); \
 	if ! git clone --depth 1 "$(REPO)" "$$TMP_DIR" >/dev/null 2>&1; then \
 		printf "$(RED)Failed to clone repo for update check.$(NC)\n"; \
 		rm -rf "$$TMP_DIR"; \
@@ -622,7 +624,7 @@ endif
 stage_module_impl:
 	$(call stage_module,$(MODULE))
 
-setup-wincross:
+setup-winx:
 	@WXLIB=/usr/x86_64-w64-mingw32/sys-root/mingw/lib; \
 	WX_VER=$$(ls "$$WXLIB"/libwx_mswu-*-Windows.a 2>/dev/null | head -1 | \
 	          sed 's|.*libwx_mswu-\([0-9][0-9.]*\)-Windows\.a|\1|'); \
@@ -652,7 +654,7 @@ setup-wincross:
 	        sudo ln -sf "$$SRC" "$$DST"; \
 	    fi; \
 	done; \
-	printf "$(GREEN)setup-wincross complete$(NC)\n"
+	printf "$(GREEN)setup-winx complete$(NC)\n"
 
 stage-Project:
 ifeq ($(MODE),monorepo)
