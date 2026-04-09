@@ -1,4 +1,4 @@
-VERSION := 3.1.7
+VERSION := 3.2.0
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -369,6 +369,13 @@ check-update:
 	printf "   Last checked : $(LAST_CHECK_TIME)\n\n"
 
 update-check: check-update
+
+
+#
+# LSP target — merges compile_commands.json from all module build dirs
+#
+lsp:
+	@python3 "$(CURDIR)/merge_compile_commands.py"
 
 
 #
