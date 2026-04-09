@@ -1,4 +1,4 @@
-VERSION := 3.2.0
+VERSION := 3.2.1
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -18,7 +18,7 @@ NPROC := $(shell nproc 2>/dev/null || sysctl -n hw.logicalcpu 2>/dev/null || ech
 
 .PHONY: help __autoupdate build build-Project check-update clean clear config config-Project default \
 	install install-Project noisy pull push quiet setup-winx show-binary-dir silent stage \
-	stage-Project update update-check version
+	stage-Project update update-check version lsp
 
 # Keep autoupdate quiet to avoid leaking its shell script when make echoes commands
 .SILENT: __autoupdate check-update update-check
@@ -289,6 +289,7 @@ help:
 	@printf "  make stage-Project          - Stage monorepo CMakeLists directly (from $(MONOREPO) root)\n"
 	@printf "  make update                 - Force update Makefile from repository\n"
 	@printf "  make version                - Print the version of the build system\n"
+	@printf "  make lsp                    - Merge compile_commands.json from all modules (for clangd)\n"
 	@printf "  show-binary-dir             - Display the binary dir for this preset\n"
 	@printf "\n"
 	@printf "Default target behavior:\n"
