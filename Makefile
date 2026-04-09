@@ -1,4 +1,4 @@
-VERSION := 3.1.6
+VERSION := 3.1.7
 # Makefile for multi-module CMake project with superbuild support
 # Requires .modules configuration file
 ifeq ($(OS),Windows_NT)
@@ -68,7 +68,7 @@ __autoupdate:
 		printf "$(BOLD)MCA Build System v$(VERSION)$(NC)\n"; \
 		printf "Last update check: $(YELLOW)$(LAST_CHECK_TIME)$(NC)\n\n"; \
 	fi; \
-	if [ "$$DIFF" -lt 600 ] && [ "$(FORCE)" != "TRUE" ]; then \
+	if [ "$$DIFF" -lt 86400 ] && [ "$(FORCE)" != "TRUE" ]; then \
 		exit 0; \
 	fi; \
 	if [ -z "$(REPO)" ]; then \
